@@ -11,3 +11,5 @@
 [2026-09-01 23:28] [INFO] Download: Remote EMDR versus CBT for PTSD after th → ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/Remote_EMDR_versus_CBT_for_PTSD_after_the_Kahraman.md
 [2026-09-01 23:32] [INFO] Suche start: posttraumatic growth (modus=studien)
 [2026-09-01 23:32] [INFO] Ergebnis gespeichert: ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/ergebnis_posttraumatic_growth.json (16 Treffer)
+[2026-09-02 00:17] [INFO] Suche start: narcissistic mother (modus=universallocal)
+[2026-09-02 00:18] [INFO] Ergebnis gespeichert: ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/ergebnis_narcissistic_mother.json (24 Treffer)

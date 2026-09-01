@@ -168,11 +168,99 @@ def q_biorxiv(query, n=6):
             "snippet": f"{p.get('authors','')}"})
     return out
 
+# ---------- Neu: PubMed / BASE / Wikidata / Lokal ----------
+def q_pubmed(query, n=6):
+    """PubMed (NCBI eutils): biomedizinische Forschung mit PMID/PMCID."""
+    url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" + urllib.parse.urlencode(
+        {"db":"pubmed","term":query,"retmax":n,"retmode":"json","sort":"relevance"})
+    j = http_json(url)
+    if "_error" in j: return []
+    ids = (j.get("esearchresult",{}) or {}).get("idlist",[]) or []
+    if not ids: return []
+    # Metadaten holen
+    u2 = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?" + urllib.parse.urlencode(
+        {"db":"pubmed","id":",".join(ids),"retmode":"json"})
+    j2 = http_json(u2)
+    out=[]
+    res = (j2.get("result") or {})
+    for pid in ids:
+        r = res.get(pid,{})
+        if not r or not r.get("title"): continue
+        doi = ""
+        for aid in r.get("articleids",[]) or []:
+            if aid.get("idtype")=="doi": doi=aid.get("value","")
+        out.append({"title": r.get("title",""), "year": r.get("pubdate","")[:4],
+            "venue": (r.get("fulljournalname") or r.get("source") or "PubMed"),
+            "is_oa": False, "pdf": None, "doi": doi or None,
+            "source":"PubMed", "url": f"https://pubmed.ncbi.nlm.nih.gov/{pid}/",
+            "snippet": r.get("description","")[:120]})
+    return out
+
+def q_base(query, n=6):
+    """BASE (Bielefeld Academic Search Engine): große Open-Access-Suchmaschine."""
+    url = "https://www.base-search.net/Search/Results?" + urllib.parse.urlencode(
+        {"lookfor":query,"format":"json","n":n})
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent":"Sucher1000/ (mailto:kontakt@sucher1000.example)"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            j = json.load(r)
+    except Exception:
+        return []
+    out=[]
+    res = j.get("response") or {}
+    for d in (res.get("docs") or [])[:n]:
+        out.append({"title": d.get("title",[""])[0] if isinstance(d.get("title"),list) else d.get("title",""),
+            "year": d.get("year",[""])[0] if isinstance(d.get("year"),list) else d.get("year"),
+            "venue": d.get("dcType",[""])[0] if isinstance(d.get("dcType"),list) else "",
+            "is_oa": bool(d.get("oa")), "pdf": None, "doi": d.get("doi"),
+            "source":"BASE", "url": (d.get("link") or [""])[0] if isinstance(d.get("link"),list) else d.get("link"),
+            "snippet": (d.get("dcdescription",[""])[0] if isinstance(d.get("dcdescription"),list) else (d.get("dcdescription") or ""))[:120]})
+    return out
+
+def q_wikidata(query, n=6):
+    """Wikidata: strukturierte Wissenseinträge/Entitäten."""
+    url = "https://www.wikidata.org/w/api.php?" + urllib.parse.urlencode(
+        {"action":"wbsearchentities","search":query,"language":"de","format":"json","limit":n})
+    j = http_json(url)
+    if "_error" in j: return []
+    out=[]
+    for e in (j.get("search") or [])[:n]:
+        out.append({"title": e.get("label") or e.get("id"),
+            "year": None, "venue":"Wikidata", "is_oa": True, "pdf":None, "doi":None,
+            "source":"Wikidata",
+            "url": f"https://www.wikidata.org/wiki/{e.get('id')}",
+            "snippet": e.get("description","")})
+    return out
+
+def q_lokal(query, n=10):
+    """LOKAL-SUCHE: durchsucht Davids HAUPTLAGER-Wissensbasis (Dateinamen + Inhalt).
+    Findet, was DAVID schon hat — vermeidet Doppelrecherche."""
+    base = "~//HAUPTLAGER"
+    kw = [w.lower() for w in query.split() if len(w)>3]
+    hits=[]
+    for root,dirs,files in os.walk(base):
+        # Tiefe begrenzen + Systemordner auslassen
+        if root.count(os.sep)-base.count(os.sep) > 5: dirs[:]=[]
+        if any(x in root for x in (".git","node_modules","07_SYSTEM","20_FROZEN")):
+            dirs[:]=[]; continue
+        for f in files:
+            if not f.lower().endswith((".md",".pdf",".txt",".bib")): continue
+            name = f.lower()
+            if any(k in name for k in kw):
+                full=os.path.join(root,f)
+                hits.append({"title":f,"year":None,"venue":"Lokal-HAUPTLAGER","is_oa":True,
+                    "pdf":None,"doi":None,"source":"Lokal",
+                    "url":full,"snippet":os.path.relpath(full,base)[:140]})
+                if len(hits)>=n: break
+        if len(hits)>=n: break
+    return hits
+
 # ---------- Quellen-Register ----------
 SCI = {"openalex": q_openalex, "crossref": q_crossref, "doaj": q_doaj,
        "europepmc": q_europepmc, "semanticscholar": q_semanticscholar,
-       "arxiv": q_arxiv, "biorxiv": q_biorxiv}
-GENERAL = {"wikipedia": q_wikipedia}
+       "arxiv": q_arxiv, "biorxiv": q_biorxiv,
+       "pubmed": q_pubmed}   # BASE entfernt: Bot-Schutz (Anubis) blockt programmatischen Zugriff
+GENERAL = {"wikipedia": q_wikipedia, "wikidata": q_wikidata, "lokal": q_lokal}
 
 def resolve_sources(mode):
     """Gibt die aktiven Quellen je Modus zurück."""
@@ -181,7 +269,7 @@ def resolve_sources(mode):
     if mode == "alle":      return {**SCI, **GENERAL}
     return dict(SCI)  # default
 
-def search(query, n=8, mode="universal", only=None):
+def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False, sort_by="relevance"):
     active = resolve_sources(mode)
     if only and only in active: active = {only: active[only]}
     seen, results = set(), []
@@ -193,7 +281,24 @@ def search(query, n=8, mode="universal", only=None):
                     seen.add(key); results.append(it)
         except Exception:
             pass
+    # --- Filter: min_year ---
+    if min_year:
+        results = [r for r in results if _ok_year(r.get("year"), min_year)]
+    # --- Filter: nur Open Access ---
+    if oa_only:
+        results = [r for r in results if r.get("is_oa") or r.get("pdf")]
+    # --- Sortierung ---
+    if sort_by == "jahr" and results and any(r.get("year") for r in results):
+        results.sort(key=lambda r: (_to_int(r.get("year")) or 0) if r.get("year") else 0, reverse=True)
     return results
+
+def _to_int(y):
+    try: return int(str(y)[:4])
+    except Exception: return None
+
+def _ok_year(y, min_year):
+    yi = _to_int(y)
+    return yi is not None and yi >= min_year
 
 def pretty(results, mode):
     print(f"\n→ {len(results)} Treffer (Modus: {mode}, dedupl.)\n")
@@ -215,6 +320,10 @@ def main():
     n = 8
     mode = "universal"
     only = None
+    min_year = None
+    oa_only = False
+    sort_by = "relevance"
+    md_export = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -222,10 +331,20 @@ def main():
             mode = argv[i+1]; i += 2
         elif a == "--quelle" and i+1 < len(argv):
             only = argv[i+1]; i += 2
+        elif a == "--jahr" and i+1 < len(argv):
+            try: min_year = int(argv[i+1]); i += 2
+            except: i += 2
+        elif a == "--oa":
+            oa_only = True; i += 1
+        elif a == "--sort" and i+1 < len(argv):
+            sort_by = argv[i+1]; i += 2
+        elif a == "--markdown":
+            md_export = True; i += 1
         elif a == "--list":
             print("Verfügbare Quellen:\n  WISSENSCHAFT:", ", ".join(SCI.keys()))
             print("  ALLGEMEIN:", ", ".join(GENERAL.keys()))
             print("Modi: studien | universal | alle")
+            print("Optionen: --jahr YYYY --oa --sort jahr|relevance --markdown")
             return
         else:
             if query is None:
@@ -235,12 +354,21 @@ def main():
             i += 1
     if query is None:
         query = "somatic experiencing trauma"
-    res = search(query, n, mode, only)
+    res = search(query, n, mode, only, min_year=min_year, oa_only=oa_only, sort_by=sort_by)
     pretty(res, mode)
-    fn = os.path.join(OUTDIR, "ergebnis_" + re.sub(r'\W+','_', query)[:40] + ".json")
+    base = "ergebnis_" + re.sub(r'\W+','_', query)[:40]
+    fn = os.path.join(OUTDIR, base + ".json")
     with open(fn, "w", encoding="utf-8") as f:
         json.dump(res, f, ensure_ascii=False, indent=2)
     print(f"→ JSON gespeichert: {fn}")
+    if md_export:
+        mdfn = os.path.join(OUTDIR, base + ".md")
+        with open(mdfn, "w", encoding="utf-8") as f:
+            f.write(f"# Suchergebnis: {query}\n_(Modus: {mode}, {len(res)} Treffer)_\n\n")
+            for r in res:
+                f.write(f"- **{r.get('title','?')}** ({r.get('source','')}, {r.get('year') or ''})\n")
+                if r.get("url"): f.write(f"  - {r['url']}\n")
+        print(f"→ Markdown gespeichert: {mdfn}")
 
 if __name__ == "__main__":
     main()
