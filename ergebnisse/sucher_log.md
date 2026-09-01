@@ -15,3 +15,5 @@
 [2026-09-02 00:18] [INFO] Ergebnis gespeichert: ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/ergebnis_narcissistic_mother.json (24 Treffer)
 [2026-09-02 00:20] [INFO] Suche start: posttraumatic growth (modus=studien)
 [2026-09-02 00:21] [INFO] Ergebnis gespeichert: ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/ergebnis_posttraumatic_growth.json (17 Treffer)
+[2026-09-02 00:34] [INFO] Suche start: inner child reparenting (modus=alle)
+[2026-09-02 00:35] [INFO] Ergebnis gespeichert: ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/ergebnis_inner_child_reparenting.json (21 Treffer)

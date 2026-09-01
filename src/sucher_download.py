@@ -82,7 +82,6 @@ def download(url, out_path=None):
         # HTML→MD konvertieren falls HTML
         elif is_html(out_path):
             md = out_path.rsplit(".",1)[0] + ".md" if "." in out_path else out_path + ".md"
-            if md == out_path: md = out_path + ".md"
             try:
                 _html_to_md(out_path, md)
                 print(f"    → konvertiert zu {md}")
