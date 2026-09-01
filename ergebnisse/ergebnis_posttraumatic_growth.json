@@ -113,26 +113,6 @@
     "url": null
   },
   {
-    "title": "The Posttraumatic Growth Inventory: Measuring the positive legacy of trauma",
-    "year": 1996,
-    "venue": "Journal of Traumatic Stress",
-    "is_oa": true,
-    "pdf": "",
-    "doi": "10.1007/BF02103658",
-    "source": "SemanticScholar",
-    "url": "https://www.semanticscholar.org/paper/b1b88940d0eafd750ae0cdbc4669b9ef0bba0384"
-  },
-  {
-    "title": "Illusory posttraumatic growth is common, but genuine posttraumatic growth is rare: A critical review and suggestions for a path forward.",
-    "year": 2023,
-    "venue": "Clinical Psychology Review",
-    "is_oa": true,
-    "pdf": "",
-    "doi": "10.1016/j.cpr.2023.102301",
-    "source": "SemanticScholar",
-    "url": "https://www.semanticscholar.org/paper/6ff5511eda396838dbc1d6a071ddc821533ac728"
-  },
-  {
     "title": "Flux growth of Sr(n+1)Ir(n)O(3n+1) [n=1, 2, infinity] crystals",
     "year": null,
     "venue": "arXiv",
@@ -164,5 +144,38 @@
     "source": "arXiv",
     "url": "https://arxiv.org/abs/1501.03770v1",
     "snippet": "Flux growth involves dissolving the components of the target compound in an appropriate flux at high temperatures and then crystallizing under supersa"
+  },
+  {
+    "title": "Posttraumatic growth after perinatal loss: A systematic review.",
+    "year": "2023",
+    "venue": "Midwifery",
+    "is_oa": false,
+    "pdf": null,
+    "doi": "10.1016/j.midw.2023.103651",
+    "source": "PubMed",
+    "url": "https://pubmed.ncbi.nlm.nih.gov/36963142/",
+    "snippet": ""
+  },
+  {
+    "title": "Adolescent Posttraumatic Growth: A Review.",
+    "year": "2021",
+    "venue": "Child psychiatry and human development",
+    "is_oa": false,
+    "pdf": null,
+    "doi": "10.1007/s10578-020-01047-9",
+    "source": "PubMed",
+    "url": "https://pubmed.ncbi.nlm.nih.gov/32830298/",
+    "snippet": ""
+  },
+  {
+    "title": "Posttraumatic growth of medical staff during COVID-19 pandemic: A scoping review.",
+    "year": "2024",
+    "venue": "BMC public health",
+    "is_oa": false,
+    "pdf": null,
+    "doi": "10.1186/s12889-023-17591-7",
+    "source": "PubMed",
+    "url": "https://pubmed.ncbi.nlm.nih.gov/38355487/",
+    "snippet": ""
   }
 ]

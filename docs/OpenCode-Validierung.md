@@ -1,24 +1,36 @@
 # OpenCode-Validierung für SUCHER 1000
 
-## Status
-Der Code wurde **statisch + End-to-End validiert** (durch Hermes):
-- ✅ Alle Module kompilieren (`py_compile`) ohne Fehler
-- ✅ Alle Module importieren sauber (7 Such-Quellen + 3 OA-Quellen)
-- ✅ End-to-End-Lauf: `python3 sucher.py "posttraumatic growth" 3` → 16 Treffer → JSON gespeichert
-- ✅ PDF-Erkennung im Downloader korrekt (PDF vs. Markdown)
+## Status (durch Hermes bereits validiert)
+- ✅ Alle Module kompilieren (`py_compile`) — keine Syntaxfehler
+- ✅ End-to-End: `python3 sucher.py "posttraumatic growth" 3` → 17 Treffer
+- ✅ Die 10 Verbesserungen getestet (PubMed, Wikidata, Lokal, --jahr, --oa, --sort, --markdown)
 
-## OpenCode-Validierung (optional, von dir ausführbar)
-OpenCode ist installiert (`~/.local/bin/opencode`), aber braucht die **Env-Variable `OPENROUTER_API_KEY`**
-(die nur du/sürez System hast — Hermes-Agent darf Keys nicht manuell auslesen).
+## OpenCode-Validierung (du führst sie aus — braucht deinen Key)
+OpenCode ist installiert, aber braucht die Env-Variable `OPENROUTER_API_KEY` (nur du hast den Key;
+Hermes-Agent darf Secrets nicht auslesen/weiterreichen).
 
-So validierst du den Code mit OpenCode (Shell):
+### Einmalig: Key setzen (Shell)
 ```bash
-cd ~/HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool
-export OPENROUTER_API_KEY="dein-key-aus-der-hermes-config"   # nur du
-opencode run "Prüfe src/*.py und sucher.py auf Bugs und Verbesserungen. Kurz (DE)."
+export OPENROUTER_API_KEY="dein-openrouter-key"    # der Key aus deiner Hermes-Config/.env
 ```
 
-## Warum die Trennung
-- Hermes kann den Code vollständig validieren (getan).
-- OpenCode liefert eine **zweite, unabhängige** Code-Review-Perspektive (frische Sicht).
-- Der Key-Schutz ist beabsichtigt: Secrets werden nicht weitergegeben.
+### Code reviewen
+```bash
+cd ~/HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool
+opencode run "Prüfe src/*.py und sucher.py auf Bugs, Laufzeitfehler und Verbesserungen. Kurz (DE), max 15 Zeilen."
+```
+- `opencode` wird unter `~/.local/bin/opencode` gefunden (bestätigt).
+- Modell-Konfig: OpenRouter (`deepseek-v4-flash`), siehe `~/.opencode/opencode.json`.
+
+## Warum Hermes OpenCode nicht direkt ausführt
+Die Auth schlägt fehl, weil `OPENROUTER_API_KEY` nicht in der Umgebung des Agents gesetzt ist und
+Hermes Keys nicht manuell aus der Config liest (Datenschutz). Deshalb: skeptischer, aber du führst
+den finalen OpenCode-Review einmalig selbst aus — danach ist die zweite, unabhängige Prüfung abgeschlossen.
+
+## Module zu prüfen
+| Datei | Rolle |
+|---|---|
+| `sucher.py` | Haupt-Einstieg (Pipeline suche→OA→download→log) |
+| `src/sucher_universal.py` | 9 Wissenschafts- + 3 Allgemein-Quellen + Filter/Optionen |
+| `src/sucher_oa.py` | OA-Resolver (Unpaywall/OpenAlex/EuropePMC) |
+| `src/sucher_download.py` | curl→Browser-Engine-Fallback, PDF-Erkennung |
