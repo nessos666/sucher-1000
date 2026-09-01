@@ -110,7 +110,7 @@ def main():
             elif r.get("pdf"):
                 url = r["pdf"]
             if not url: continue
-            name = re.sub(r"\W+","_", r.get("title","download"))[:50] + ".md"
+            name = re.sub(r"\W+","_", r.get("title","download"))[:50]   # OHNE Endung — Downloader entscheidet
             try:
                 res = sdl.download(url, os.path.join(args.out, name))
                 log(f"Download: {r.get('title','')[:40]} → {res}")

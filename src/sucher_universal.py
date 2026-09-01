@@ -77,9 +77,14 @@ def q_doaj(query, n=8):
     for r in j.get("results", []):
         b=r.get("bibjson",{}); loc=r.get("bibjson",{}).get("link",[{}])
         url_pdf=next((l.get("url") for l in loc if l.get("type")=="fulltext"), None)
+        # Robust: identifier kann leer sein
+        doi=None
+        ids = b.get("identifier") or []
+        if ids and isinstance(ids[0], dict):
+            doi = ids[0].get("id")
         out.append({"title": b.get("title",""), "year": b.get("year"),
             "venue": b.get("journal",{}).get("title","") if b.get("journal") else "",
-            "is_oa": True, "pdf": url_pdf, "doi": b.get("identifier",[{}])[0].get("id") if b.get("identifier") else "",
+            "is_oa": True, "pdf": url_pdf, "doi": doi,
             "source": "DOAJ", "url": url_pdf})
     return out
 
