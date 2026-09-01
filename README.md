@@ -52,8 +52,18 @@ Strategie:
 
 **Einfachster Aufruf:** Sage im Chat z.B. *"Sucher, lade URL X"* — Hermes nutzt dann automatisch: curl → bei Block Browser-Engine → speichert als Markdown in den Zielordner. (Demo: Online-EMDR-Studie, die per Browser-Engine gerettet wurde.)
 
+### ⭐ Vor-Schritt: OA-Resolver (neuer erster Schritt — vermeidet Blocks an der Wurzel)
+```bash
+python3 sucher_oa.py "10.1080/20008066.2026.2702141"   # DOI oder URL
+```
+- **Unpaywall + OpenAlex + Europe PMC** (alle kostenlos, live getestet)
+- Findet die **freie Version/PDF-SURL VOR dem Download** → meist direkt ladbar (oft PMC-PDF), kein reCAPTCHA
+- Bei geschützten DOIs → ehrlich "keine freie Version" 🔒 (halluziniert nichts)
+
+**Damit ist die Reihenfolge jetzt:** OA-Resolver (freie Version finden) → curl → bei Block Browser-Engine → ehrlicher Check.
+
 ## Autopilot-Workflow (blockierte Quellen)
 1. `sucher_universal.py "thema"` → findet Studie + PDF/DOI-Link
-2. `sucher_download.py <url>` → versucht curl
-3. Bei Block: Browser-Engine (`browser_exec`) → extrahiert Volltext → `.md` in Ordner
+2. `sucher_oa.py <doi>` → findet die freie Version (vermeidet Block)
+3. `sucher_download.py <url>` → lädt (curl, bei Block Browser-Engine)
 4. Ehrlicher Check: Titel/Abstract verifizieren (keine fehl-zugeordneten Dateien)
