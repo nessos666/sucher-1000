@@ -36,3 +36,24 @@ python3 studien_search.py "query"          # alte Einzelversion (nur Wissenschaf
 
 ## Update-Schutz
 Liegt **außerhalb** `~/.hermes/` (`HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool`) → **überlebt** `hermes update`.
+
+## Downloads mit Bot-Schutz-Umgehung
+**Problem:** Viele Open-Access-Studien (PMC, Taylor&Francis u.a.) blocken `curl` via
+**reCAPTCHA/Cloudflare** → nur leere Stubs.
+**Lösung (Sucher-Download, `sucher_download.py`):**
+```bash
+python3 sucher_download.py "https://pmc.ncbi.nlm.nih.gov/articles/PMC13508539/" [ausgabe.md]
+```
+Strategie:
+1. **curl** (schnell, für offene Quellen)
+2. Erkennt Block (reCAPTCHA/Cloudflare/<40KB) automatisch
+3. Legt `.browser_task`-Datei ab → **Hermes gibt sie an die reale Browser-Engine** (`browser_exec`), die reCAPTCHA umgeht (echte Browser-Sitzung)
+4. HTML→Markdown-Konvertierung (html2text)
+
+**Einfachster Aufruf:** Sage im Chat z.B. *"Sucher, lade URL X"* — Hermes nutzt dann automatisch: curl → bei Block Browser-Engine → speichert als Markdown in den Zielordner. (Demo: Online-EMDR-Studie, die per Browser-Engine gerettet wurde.)
+
+## Autopilot-Workflow (blockierte Quellen)
+1. `sucher_universal.py "thema"` → findet Studie + PDF/DOI-Link
+2. `sucher_download.py <url>` → versucht curl
+3. Bei Block: Browser-Engine (`browser_exec`) → extrahiert Volltext → `.md` in Ordner
+4. Ehrlicher Check: Titel/Abstract verifizieren (keine fehl-zugeordneten Dateien)
