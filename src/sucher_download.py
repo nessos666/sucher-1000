@@ -65,15 +65,30 @@ def download(url, out_path=None):
     # Stufe 1: curl
     if curl_download(url, out_path):
         print("    ✓ curl erfolgreich")
+        # PDF erkennen: Endung korrekt setzen (.pdf statt .md)
+        if is_pdf(out_path):
+            if not out_path.lower().endswith(".pdf"):
+                pdf_path = out_path + ".pdf"
+                os.rename(out_path, pdf_path)
+                out_path = pdf_path
+            print(f"    → PDF gespeichert: {out_path}")
         # HTML→MD konvertieren falls HTML
-        if is_html(out_path):
-            md = re.sub(r"\.html?$", ".md", out_path) if out_path.endswith(".html") or out_path.endswith(".htm") else out_path + ".md"
-            subprocess.run(["html2text", out_path, ">" , md], shell=True)
-            print("    → konvertiert zu", md)
+        elif is_html(out_path):
+            md = out_path.rsplit(".",1)[0] + ".md" if "." in out_path else out_path + ".md"
+            if md == out_path: md = out_path + ".md"
+            subprocess.run(["html2text", out_path, ">", md], shell=True)
+            print(f"    → konvertiert zu {md}")
         return out_path
     print("    ✗ curl geblockt/fehlgeschlagen → Browser-Engine")
     # Stufe 2: Browser-Engine (Task ablegen)
     return browser_download(url, out_path)
+
+def is_pdf(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(1024).lstrip().startswith(b"%PDF")
+    except Exception:
+        return False
 
 def is_html(path):
     try:

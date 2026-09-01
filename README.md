@@ -1,69 +1,47 @@
-# SUCHER — Davids Studien- & Literatur-Such-Tool
+# SUCHER 1000 — Davids großes Studien- & Literatur-Tool
 
-## Name & Status
-- **Name:** SUCHER (Ausbaustufe 1000 = "Sucher 1000")
-- **Status:** Eigener, **update-proof Git-Ordner** — getrennt von `~/.hermes`, überlebt Hermes-Updates.
-- **Besitzer:** David (gebaut mit Hermes, Code von Hermes, Anforderung + Konzept von David)
+**Update-proof · eigenständig · unabhängig von Hermes**
 
-## Was es kann
-Robuste **Multi-Quellen-Suche** über 6 Quellen (mit Fallback), **universal für jedes Thema**:
-
-### Modi (wahlbar)
-- `--modus studien` — nur Wissenschaft (OpenAlex, DOAJ, Crossref, Europe PMC, Semantic Scholar)
-- `--modus universal` — Wissenschaft + Allgemeinwissen (Wikipedia DE/EN) → Standard
-- `--modus alle` — alle Quellen
-
-### Quellen
-- **Wissenschaft:** OpenAlex · DOAJ · Crossref · Europe PMC · Semantic Scholar
-- **Allgemein:** Wikipedia (deutsch + englisch)
-- `--quelle NAME` — nur eine bestimmte Quelle suchen (z.B. `--quelle wikipedia`)
-
-## Nutzung (im HAUPTLAGER)
-```bash
-cd ~/HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool
-python3 sucher_universal.py "dein Suchbegriff" [anzahl] [--modus M] [--quelle Q]
-python3 sucher_universal.py --list        # Quellen & Modi anzeigen
-python3 batch_search.py                    # 8-Themen-Batch
-python3 studien_search.py "query"          # alte Einzelversion (nur Wissenschaft)
+## Struktur (Git-Ordner, eigenständig)
+```
+42_Sucher_Tool/
+├── sucher.py          ← HAUPT-Einstiegspunkt (die ganze Pipeline in einem Befehl)
+├── src/               ← Module (suchen → freie Version → download)
+│   ├── sucher_universal.py    (7-Quellen-Suche)
+│   ├── sucher_oa.py           (Unpaywall/OpenAlex/EuropePMC → freie Version)
+│   └── sucher_download.py     (curl → bei Block Browser-Engine)
+├── ergebnisse/        ← Output (JSON + geladene PDFs/Markdown + LOG)
+├── docs/              ← Anleitungen
+├── legacy/            ← alte Versionen (batch_search, studien_search)
+└── README.md
 ```
 
-## Ausgabe-Felder
-`title` · `year` · `venue` · `is_oa` (frei?) · `pdf` (Link) · `doi` · `source` · `url` · `snippet`
+## Das große Tool — eine Pipeline
+```
+SUCHE (7 APIs) → OA-Resolver (freie Version finden) → DOWNLOAD (curl→Browser) → SORTIEREN → LOG
+```
+**Ein Befehl:**
+```bash
+python3 sucher.py "EMDR complex PTSD" 8 --modus studien             # nur suchen
+python3 sucher.py "online EMDR" 3 --download                        # suchen + laden
+python3 sucher.py --setup                                           # Umgebungs-Check
+python3 sucher.py --sources                                         # Quellen anzeigen
+```
+
+## Quellen (7 wissenschaftlich + Allgemein)
+OpenAlex · Crossref · DOAJ · Europe PMC · Semantic Scholar · arXiv · bioRxiv + Wikipedia
+plus **OA-Resolver:** Unpaywall + OpenAlex + Europe PMC (findet kostenlose Version vor Download).
+
+## Bot-Schutz-Lösung (reCAPTCHA/Cloudflare)
+1. **OA-Resolver** → findet die freie PMC/UP-Version (vermeidet Block an der Wurzel)
+2. **curl** → lädt offene Quellen
+3. **Browser-Engine** (via Hermes/chrome) → holt, was curl nicht kann (echte Browser-Sitzung)
 
 ## Ehrlichkeit
-- ✅ FREI = frei ladbar (oder PDF-Link) · 🔒 geschützt = nicht frei → **legal** über Onleihe/Bibliothek/Verlag
-- Bei `--quelle wikipedia`: Allgemeinwissen-Einträge (kein PDF, frei zugänglich)
+- Falsch zugeordnete DOIs/Studien werden **nicht übernommen** (PDF-Erkennung + Titelcheck).
+- Geschützte → ehrlich „keine freie Version" markiert (nie Raubkopie).
+- Alles im LOG (`ergebnisse/sucher_log.md`) nachvollziehbar.
 
-## Update-Schutz
-Liegt **außerhalb** `~/.hermes/` (`HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool`) → **überlebt** `hermes update`.
-
-## Downloads mit Bot-Schutz-Umgehung
-**Problem:** Viele Open-Access-Studien (PMC, Taylor&Francis u.a.) blocken `curl` via
-**reCAPTCHA/Cloudflare** → nur leere Stubs.
-**Lösung (Sucher-Download, `sucher_download.py`):**
-```bash
-python3 sucher_download.py "https://pmc.ncbi.nlm.nih.gov/articles/PMC13508539/" [ausgabe.md]
-```
-Strategie:
-1. **curl** (schnell, für offene Quellen)
-2. Erkennt Block (reCAPTCHA/Cloudflare/<40KB) automatisch
-3. Legt `.browser_task`-Datei ab → **Hermes gibt sie an die reale Browser-Engine** (`browser_exec`), die reCAPTCHA umgeht (echte Browser-Sitzung)
-4. HTML→Markdown-Konvertierung (html2text)
-
-**Einfachster Aufruf:** Sage im Chat z.B. *"Sucher, lade URL X"* — Hermes nutzt dann automatisch: curl → bei Block Browser-Engine → speichert als Markdown in den Zielordner. (Demo: Online-EMDR-Studie, die per Browser-Engine gerettet wurde.)
-
-### ⭐ Vor-Schritt: OA-Resolver (neuer erster Schritt — vermeidet Blocks an der Wurzel)
-```bash
-python3 sucher_oa.py "10.1080/20008066.2026.2702141"   # DOI oder URL
-```
-- **Unpaywall + OpenAlex + Europe PMC** (alle kostenlos, live getestet)
-- Findet die **freie Version/PDF-SURL VOR dem Download** → meist direkt ladbar (oft PMC-PDF), kein reCAPTCHA
-- Bei geschützten DOIs → ehrlich "keine freie Version" 🔒 (halluziniert nichts)
-
-**Damit ist die Reihenfolge jetzt:** OA-Resolver (freie Version finden) → curl → bei Block Browser-Engine → ehrlicher Check.
-
-## Autopilot-Workflow (blockierte Quellen)
-1. `sucher_universal.py "thema"` → findet Studie + PDF/DOI-Link
-2. `sucher_oa.py <doi>` → findet die freie Version (vermeidet Block)
-3. `sucher_download.py <url>` → lädt (curl, bei Block Browser-Engine)
-4. Ehrlicher Check: Titel/Abstract verifizieren (keine fehl-zugeordneten Dateien)
+## Unabhängig von Hermes (Update-proof)
+Liegt in `HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool` — **außerhalb** `~/.hermes/`.
+`hermes update` berührt nichts hier. Code bei Bedarf mit OpenCode validiert.
