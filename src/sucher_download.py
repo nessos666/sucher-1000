@@ -102,7 +102,9 @@ def is_pdf(path):
 def is_html(path):
     try:
         with open(path, "rb") as f:
-            return f.read(1024).lstrip().startswith(b"<!doctype") or b"<html" in f.read(2048)
+            data = f.read(4096)  # einmal lesen, keine Pointer-Probleme
+        data_l = data.lstrip()
+        return data_l.startswith(b"<!doctype") or b"<html" in data
     except Exception:
         return False
 

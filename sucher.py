@@ -97,7 +97,7 @@ def main():
     log(f"Ergebnis gespeichert: {fn} ({len(results)} Treffer)")
     print(f"\n  💾 Ergebnis: {fn}")
     print(f"  ⏱ {time.time()-t0:.1f}s\n")
-    print("  Tipp: --download lädt frei ladbare automatisch; dann --exp nach Ordner.")
+    print("  Tipp: --download lädt frei ladbare automatisch in --out.")
 
     if args.download:
         print("\n  --- Frei ladbare herunterladen ---")
