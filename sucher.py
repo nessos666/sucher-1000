@@ -55,7 +55,8 @@ def main():
         print("  Ziel:", DEFAULT_OUT); return
 
     if args.sources:
-        os.system(f"python3 {os.path.join(SRC,'sucher_universal.py')} --list")
+        src_list = os.path.join(SRC, "sucher_universal.py")
+        subprocess.run(["python3", src_list, "--list"])
         return
 
     if not args.query:
@@ -101,10 +102,13 @@ def main():
     if args.download:
         print("\n  --- Frei ladbare herunterladen ---")
         for i, r in enumerate(results):
-            oa = r.get("_oa") or (r.get("pdf"), r.get("source")) if r.get("pdf") else None
+            # URL bestimmen: zuerst OA-Resolver-Ergebnis, sonst das PDF-Feld
             url = None
-            if isinstance(r.get("_oa"), tuple): url = r["_oa"][1]
-            elif r.get("pdf"): url = r["pdf"]
+            oa_res = r.get("_oa")
+            if isinstance(oa_res, tuple) and len(oa_res) > 1:
+                url = oa_res[1]
+            elif r.get("pdf"):
+                url = r["pdf"]
             if not url: continue
             name = re.sub(r"\W+","_", r.get("title","download"))[:50] + ".md"
             try:

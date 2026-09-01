@@ -56,7 +56,14 @@ def q_crossref(query, n=8):
     if "_error" in j: return []
     out=[]
     for w in j.get("message", {}).get("items", []):
-        yr = (w.get("issued",{}).get("date-parts",[[None]])[0][0])
+        # Robust: date-parts kann leer/verschachtelt sein → kein IndexError
+        yr = None
+        try:
+            dp = (w.get("issued",{}) or {}).get("date-parts", None)
+            if isinstance(dp, list) and dp and isinstance(dp[0], list) and dp[0]:
+                yr = dp[0][0]
+        except Exception:
+            yr = None
         out.append({"title": (w.get("title") or [""])[0], "year": yr,
             "venue": (w.get("container-title") or [""])[0] if w.get("container-title") else "",
             "is_oa": False, "pdf": None, "doi": w.get("DOI"), "source": "Crossref", "url": w.get("URL")})
@@ -128,7 +135,7 @@ def q_wikipedia(query, n=6):
 # ---------- Preprint-Quellen (neu) ----------
 def q_arxiv(query, n=6):
     """arXiv-API (Atom-Feed): Preprints Physik/ML/quantitativ."""
-    url = "http://export.arxiv.org/api/query?" + urllib.parse.urlencode(
+    url = "https://export.arxiv.org/api/query?" + urllib.parse.urlencode(
         {"search_query": f"all:{query}", "max_results": n, "sortBy":"relevance"})
     try:
         req = urllib.request.Request(url, headers=UA)

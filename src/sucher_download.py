@@ -76,8 +76,11 @@ def download(url, out_path=None):
         elif is_html(out_path):
             md = out_path.rsplit(".",1)[0] + ".md" if "." in out_path else out_path + ".md"
             if md == out_path: md = out_path + ".md"
-            subprocess.run(["html2text", out_path, ">", md], shell=True)
-            print(f"    → konvertiert zu {md}")
+            try:
+                _html_to_md(out_path, md)
+                print(f"    → konvertiert zu {md}")
+            except Exception as e:
+                print(f"    ⚠️ Konvertierung übersprungen ({e}); HTML behalten: {out_path}")
         return out_path
     print("    ✗ curl geblockt/fehlgeschlagen → Browser-Engine")
     # Stufe 2: Browser-Engine (Task ablegen)
@@ -96,6 +99,32 @@ def is_html(path):
             return f.read(1024).lstrip().startswith(b"<!doctype") or b"<html" in f.read(2048)
     except Exception:
         return False
+
+def _html_to_md(src, dst):
+    """HTML→Markdown: bevorzugt Python-Modul html2text, Fallback auf W3M/Text."""
+    try:
+        import html2text  # Python-Modul (wenn installiert)
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        with open(src, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        with open(dst, "w", encoding="utf-8") as f:
+            f.write(h.handle(content))
+        return
+    except ImportError:
+        pass
+    # Fallback: W3M (textbasiert) oder pandoc
+    for tool in (["w3m","-dump",src], ["pandoc",src,"-t","markdown","-o",dst]):
+        try:
+            r = subprocess.run(tool, capture_output=True)
+            if r.returncode == 0:
+                if tool[0] == "w3m":
+                    with open(dst, "w", encoding="utf-8") as f:
+                        f.write(r.stdout.decode("utf-8", errors="replace"))
+                return
+        except Exception:
+            pass
+    raise RuntimeError("kein html2text/w3m/pandoc gefunden")
 
 def main():
     if len(sys.argv) < 2:
