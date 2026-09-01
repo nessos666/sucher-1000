@@ -319,9 +319,9 @@ def _expand_query(query):
     de_en = {
         "mutter": "mother", "toxisch": "toxic", "narzisstisch": "narcissistic",
         "kind": "child", "selbstwert": "self-esteem", "selbstsabotage": "self-sabotage",
-        "trauma": "trauma", "emotionale vernachlässigung": "emotional neglect",
+        "emotionale vernachlässigung": "emotional neglect",
         "beschämung": "shaming",
-    }
+    }  # "trauma"="trauma" bewusst weggelassen (DE==EN → redundante Variante)
     # Wenn deutsche Begriffe im Query, englische Ergänzung hinzufügen
     lower = q.lower()
     en_found, de_found = [], []
