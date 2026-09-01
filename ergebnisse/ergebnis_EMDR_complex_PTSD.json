@@ -30,16 +30,6 @@
     "url": "https://doi.org/10.1002/da.1029"
   },
   {
-    "title": "Psychological interventions for ICD-11 complex PTSD symptoms: systematic review and meta-analysis",
-    "year": 2019,
-    "venue": "Psychological Medicine",
-    "is_oa": true,
-    "pdf": "https://pure.ulster.ac.uk/en/publications/e19ba0ed-9f6e-45fa-b4a5-0fa3827e0235",
-    "doi": "https://doi.org/10.1017/s0033291719000436",
-    "source": "OpenAlex",
-    "url": "https://doi.org/10.1017/s0033291719000436"
-  },
-  {
     "title": "The Need for a Theoretical Framework and Additional “Tools” for Using EMDR With Complex PTSD",
     "year": 2016,
     "venue": "EMDR Toolbox",
@@ -58,16 +48,6 @@
     "doi": "10.1891/9780826171276.0004",
     "source": "Crossref",
     "url": "https://doi.org/10.1891/9780826171276.0004"
-  },
-  {
-    "title": "Traumatic Memory and EMDR, When Dual Attention Is Possible",
-    "year": 2016,
-    "venue": "EMDR Toolbox",
-    "is_oa": false,
-    "pdf": null,
-    "doi": "10.1891/9780826171276.0002",
-    "source": "Crossref",
-    "url": "https://doi.org/10.1891/9780826171276.0002"
   },
   {
     "title": "Effectiveness of an intensive treatment programme combining prolonged exposure and eye movement desensitization and reprocessing for severe post-traumatic stress disorder",
@@ -98,16 +78,6 @@
     "doi": "2000-8066",
     "source": "DOAJ",
     "url": "http://dx.doi.org/10.1080/20008198.2020.1860346"
-  },
-  {
-    "title": "A multicentred two-arm parallel single-blind superiority randomised controlled trial comparing psychological and emotional stabilisation with eye movement desensitisation and reprocessing and treatment-as-usual to treatment-as-usual with adults with intellectual disabilities who have post-traumatic stress disorder (the Trauma-AID trial): protocol",
-    "year": "2025",
-    "venue": "BMJ Open",
-    "is_oa": true,
-    "pdf": "https://bmjopen.bmj.com/content/15/12/e108818.full",
-    "doi": "10.1136/bmjopen-2025-108818",
-    "source": "DOAJ",
-    "url": "https://bmjopen.bmj.com/content/15/12/e108818.full"
   },
   {
     "title": "A pilot study of the feasibility and preliminary outcomes of sequential TF-CBT and EMDR online group therapy for adult women with histories of childhood sexual abuse.",
@@ -143,17 +113,6 @@
     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13267020/"
   },
   {
-    "title": "Efficacy of the EMDR-Trauma Management Protocol in treating complex-traumatized children and adolescents",
-    "year": "2026",
-    "venue": "",
-    "is_oa": "N",
-    "pdf": null,
-    "doi": "10.31234/osf.io/rksmp_v4",
-    "source": "EuropePMC",
-    "pmcid": null,
-    "url": null
-  },
-  {
     "title": "Ullemar's formula for the Jacobian of the complex moment mapping",
     "year": null,
     "venue": "arXiv",
@@ -187,14 +146,36 @@
     "snippet": "We discuss how quantitative cohomological informations could provide qualitative properties on complex and symplectic manifolds. In particular we focu"
   },
   {
-    "title": "Is star complexity a proxy for information based complexity of graphs?",
-    "year": null,
-    "venue": "arXiv",
-    "is_oa": true,
+    "title": "Psychological interventions for ICD-11 complex PTSD symptoms: systematic review and meta-analysis.",
+    "year": "2019",
+    "venue": "Psychological medicine",
+    "is_oa": false,
     "pdf": null,
-    "doi": null,
-    "source": "arXiv",
-    "url": "https://arxiv.org/abs/2510.07722v1",
-    "snippet": "Information-based complexity (IBC) is a well-defined complexity measure of any object given a description in a language and a classifier that identifi"
+    "doi": "10.1017/S0033291719000436",
+    "source": "PubMed",
+    "url": "https://pubmed.ncbi.nlm.nih.gov/30857567/",
+    "snippet": ""
+  },
+  {
+    "title": "Treating complex PTSD with Schema Therapy, ImRs and EMDR: a review and case study.",
+    "year": "2025",
+    "venue": "European journal of psychotraumatology",
+    "is_oa": false,
+    "pdf": null,
+    "doi": "10.1080/20008066.2025.2573616",
+    "source": "PubMed",
+    "url": "https://pubmed.ncbi.nlm.nih.gov/41160015/",
+    "snippet": ""
+  },
+  {
+    "title": "PTSD and complex PTSD, current treatments and debates: a review of reviews.",
+    "year": "2025",
+    "venue": "British medical bulletin",
+    "is_oa": false,
+    "pdf": null,
+    "doi": "10.1093/bmb/ldaf015",
+    "source": "PubMed",
+    "url": "https://pubmed.ncbi.nlm.nih.gov/41004137/",
+    "snippet": ""
   }
 ]

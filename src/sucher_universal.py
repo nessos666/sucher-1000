@@ -46,7 +46,9 @@ def q_openalex(query, n=8):
             "venue": src.get("display_name") if src else "",
             "is_oa": oa.get("is_oa", False),
             "pdf": oa.get("oa_url") or (w.get("best_oa_location") or {}).get("pdf_url"),
-            "doi": w.get("doi"), "source": "OpenAlex", "url": w.get("doi")})
+            "doi": w.get("doi"), "source": "OpenAlex", "url": w.get("doi"),
+            "cites": w.get("cited_by_count", 0),
+            "relevance": (w.get("relevance_score") or 0)})
     return out
 
 def q_crossref(query, n=8):
@@ -281,28 +283,81 @@ def resolve_sources(mode):
     if mode == "alle":      return {**SCI, **GENERAL}
     return dict(SCI)  # default
 
-def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False, sort_by="relevance"):
+def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False, sort_by="relevance", expand=True):
     active = resolve_sources(mode)
     if only and only in active: active = {only: active[only]}
+    # --- Query-Expansion: engli/DE + Basis ---
+    queries = _expand_query(query) if expand else [query]
     seen, results = set(), []
-    for name, fn in active.items():
-        try:
-            for it in fn(query, n):
-                key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
-                if key and key not in seen:
-                    seen.add(key); results.append(it)
-        except Exception:
-            pass
+    for qy in queries:
+        for name, fn in active.items():
+            try:
+                for it in fn(qy, n):
+                    key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
+                    if key and key not in seen:
+                        seen.add(key); results.append(it)
+            except Exception:
+                pass
     # --- Filter: min_year ---
     if min_year:
         results = [r for r in results if _ok_year(r.get("year"), min_year)]
     # --- Filter: nur Open Access ---
     if oa_only:
         results = [r for r in results if r.get("is_oa") or r.get("pdf")]
-    # --- Sortierung ---
-    if sort_by == "jahr" and results and any(r.get("year") for r in results):
+    # --- Cross-Quellen-Scoring (relevanteste zuerst) ---
+    if sort_by != "jahr":
+        results = _score_sort(results)
+    else:
         results.sort(key=lambda r: (_to_int(r.get("year")) or 0) if r.get("year") else 0, reverse=True)
     return results
+
+def _expand_query(query):
+    """Query-Expansion: basis + deutsche/englische Varianten + Kernbegriffe."""
+    q = query.strip()
+    variants = [q]
+    # Wichtigste Begriffskombinationen (DE↔EN) mitlösen
+    de_en = {
+        "mutter": "mother", "toxisch": "toxic", "narzisstisch": "narcissistic",
+        "kind": "child", "selbstwert": "self-esteem", "selbstsabotage": "self-sabotage",
+        "trauma": "trauma", "emotionale vernachlässigung": "emotional neglect",
+        "beschämung": "shaming",
+    }
+    # Wenn deutsche Begriffe im Query, englische Ergänzung hinzufügen
+    lower = q.lower()
+    en_found, de_found = [], []
+    for de, en in de_en.items():
+        if de.lower() in lower and en not in en_found:
+            en_found.append(en)
+        if en in lower and de not in de_found:
+            de_found.append(de)
+    # Kombinierte Variante (EN Begriffe ergänzen)
+    if en_found:
+        variants.append(q + " " + " ".join(en_found))
+    if de_found:
+        variants.append(q + " " + " ".join(de_found))
+    # Dedup
+    seen=set(); out=[]
+    for v in variants:
+        if v and v not in seen:
+            seen.add(v); out.append(v)
+        if len(out)>=3: break
+    return out
+
+def _score_sort(results):
+    """Cross-Quellen-Scoring: gewichtet nach Zitaten (cites), Relevanz, OA, Quelle."""
+    # Quelle-Gewicht (Peer-reviewed stärker)
+    q_weight = {"OpenAlex":1.0, "EuropePMC":1.0, "Crossref":0.8, "DOAJ":0.8,
+                "PubMed":0.9, "arXiv":0.5, "SemanticScholar":0.8,
+                "Wikipedia":0.3, "Wikidata":0.3, "Lokal":0.6}
+    def score(r):
+        cites = r.get("cites") or 0
+        rel = r.get("relevance") or 0
+        src = q_weight.get(r.get("source"), 0.6)
+        oa = 0.15 if (r.get("is_oa") or r.get("pdf")) else 0
+        # Zitate log-skaliert (häufig 0), + Relevanz + Quelle + OA
+        s = (min(cites, 200) / 40.0) + (rel * 1.5) + src + oa
+        return s
+    return sorted(results, key=score, reverse=True)
 
 def _to_int(y):
     try: return int(str(y)[:4])
@@ -317,7 +372,8 @@ def pretty(results, mode):
     for r in results:
         oa = "✅ FREI" if r.get("is_oa") else ("🟡 PDF?" if r.get("pdf") else "🔒 geschützt")
         lbl = r.get("title") or "(ohne Titel)"
-        print(f"[{oa}] [{r.get('source')}] {lbl}  ({r.get('year') or ''})")
+        cites = f" · 📈{r['cites']}" if r.get("cites") else ""
+        print(f"[{oa}] [{r.get('source')}] {lbl}{cites}  ({r.get('year') or ''})")
         if r.get("venue"): print(f"      {r['venue']}")
         if r.get("snippet"): print(f"      {r['snippet']}")
         if r.get("doi"): print(f"      DOI: {r['doi']}")

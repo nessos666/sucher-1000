@@ -17,3 +17,12 @@
 [2026-09-02 00:21] [INFO] Ergebnis gespeichert: ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/ergebnis_posttraumatic_growth.json (17 Treffer)
 [2026-09-02 00:34] [INFO] Suche start: inner child reparenting (modus=alle)
 [2026-09-02 00:35] [INFO] Ergebnis gespeichert: ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/ergebnis_inner_child_reparenting.json (21 Treffer)
+[2026-09-02 00:39] [INFO] Suche start: posttraumatic growth (modus=universal)
+[2026-09-02 00:39] [INFO] Ergebnis gespeichert: /tmp/opencode/st/ergebnis_posttraumatic_growth.json (26 Treffer)
+[2026-09-02 00:39] [INFO] Download: Research progress on posttraumatic growt → /tmp/opencode/st/Research_progress_on_posttraumatic_growth_of_burn_.browser_task
+[2026-09-02 00:39] [INFO] Download: Posttraumatic Growth and Its Dimensions  → /tmp/opencode/st/Posttraumatic_Growth_and_Its_Dimensions_in_the_Mot.browser_task
+[2026-09-02 00:39] [INFO] Download: The moderating effect of perceived hope  → /tmp/opencode/st/The_moderating_effect_of_perceived_hope_in_the_rel
+[2026-09-02 00:39] [INFO] Download: Posttraumatic growth in mothers of child → /tmp/opencode/st/Posttraumatic_growth_in_mothers_of_children_with_s.browser_task
+[2026-09-02 00:39] [INFO] Download: Posttraumatic growth of medical staff du → /tmp/opencode/st/Posttraumatic_growth_of_medical_staff_during_COVID.browser_task
+[2026-09-02 00:40] [INFO] Suche start: EMDR complex PTSD (modus=studien)
+[2026-09-02 00:40] [INFO] Ergebnis gespeichert: ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/ergebnis_EMDR_complex_PTSD.json (17 Treffer)
