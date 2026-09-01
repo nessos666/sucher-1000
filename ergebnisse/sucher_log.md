@@ -9,3 +9,5 @@
 [2026-09-01 23:28] [INFO] Download: Effectiveness of Eye Movement Desensitis → ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/Effectiveness_of_Eye_Movement_Desensitisation_and_.md.browser_task
 [2026-09-01 23:28] [INFO] Download: How is EMDR best conducted and adapted f → ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/How_is_EMDR_best_conducted_and_adapted_for_trauma_.md.browser_task
 [2026-09-01 23:28] [INFO] Download: Remote EMDR versus CBT for PTSD after th → ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/Remote_EMDR_versus_CBT_for_PTSD_after_the_Kahraman.md
+[2026-09-01 23:32] [INFO] Suche start: posttraumatic growth (modus=studien)
+[2026-09-01 23:32] [INFO] Ergebnis gespeichert: ~//HAUPTLAGER/03_PROJEKTE/42_Sucher_Tool/ergebnisse/ergebnis_posttraumatic_growth.json (16 Treffer)
