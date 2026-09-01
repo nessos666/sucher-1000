@@ -265,8 +265,8 @@ def q_lokal(query, n=10):
 # ---------- Quellen-Register ----------
 SCI = {"openalex": q_openalex, "crossref": q_crossref, "doaj": q_doaj,
        "europepmc": q_europepmc, "semanticscholar": q_semanticscholar,
-       "arxiv": q_arxiv, "biorxiv": q_biorxiv,
-       "pubmed": q_pubmed}   # BASE entfernt: Bot-Schutz (Anubis) blockt programmatischen Zugriff
+       "arxiv": q_arxiv,
+       "pubmed": q_pubmed}   # bioRxiv weggelassen: dessen API hat KEINE Freiwort-Suche (nur DOI/COVID) → leer
 GENERAL = {"wikipedia": q_wikipedia, "wikidata": q_wikidata, "lokal": q_lokal}
 
 def resolve_sources(mode):

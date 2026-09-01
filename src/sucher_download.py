@@ -19,11 +19,18 @@ UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chr
 MIN_OK = 40000  # mind. Bytes für "echten" Inhalt (darunter = Stub)
 
 def check_blocked(html_path):
-    """Erkennt Blockier-Stubs (reCAPTCHA/Cloudflare/klein)."""
+    """Erkennt Blockier-Stubs (reCAPTCHA/Cloudflare/suspektes HTML).
+    Kleine PDFs sind VALIDE (kein Fehlalarm), kleine HTML-Snippets sind Stubs."""
     try:
         sz = os.path.getsize(html_path)
     except OSError:
         return True
+    if sz == 0:
+        return True
+    # PDF (auch klein) = echter Inhalt, nicht geblockt
+    if is_pdf(html_path):
+        return False
+    # HTML: zu klein → Stub (Block), außer es ist was Reales drin
     if sz < MIN_OK:
         return True
     with open(html_path, "r", encoding="utf-8", errors="replace") as f:
