@@ -125,9 +125,53 @@ def q_wikipedia(query, n=6):
                 "snippet": descs[i] if i < len(descs) else ""})
     return out
 
+# ---------- Preprint-Quellen (neu) ----------
+def q_arxiv(query, n=6):
+    """arXiv-API (Atom-Feed): Preprints Physik/ML/quantitativ."""
+    url = "http://export.arxiv.org/api/query?" + urllib.parse.urlencode(
+        {"search_query": f"all:{query}", "max_results": n, "sortBy":"relevance"})
+    try:
+        req = urllib.request.Request(url, headers=UA)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            xml = r.read().decode()
+    except Exception:
+        return []
+    out = []
+    for e in re.findall(r"<entry>.*?</entry>", xml, re.S):
+        t = re.search(r"<title>(.*?)</title>", e, re.S)
+        link = re.search(r'<link href="(http[^"]*)"', e)
+        summ = re.search(r"<summary>(.*?)</summary>", e, re.S)
+        out.append({
+            "title": re.sub(r"\s+"," ",t.group(1).strip()) if t else "",
+            "year": None, "venue": "arXiv", "is_oa": True,
+            "pdf": None, "doi": None, "source": "arXiv",
+            "url": link.group(1) if link else None,
+            "snippet": re.sub(r"\s+"," ",summ.group(1))[:150] if summ else ""})
+    return out
+
+def q_biorxiv(query, n=6):
+    """bioRxiv/medRxiv-API: biomedizinische Preprints."""
+    # bioRxiv Such-API
+    url = f"https://api.biorxiv.org/details/biorxiv/0_.{int(time.time())}_{n}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent":"Sucher1000/ (mailto:kontakt@sucher1000.example)"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            j = json.load(r)
+    except Exception:
+        return []
+    out=[]
+    for p in j.get("collection", [])[:n]:
+        out.append({
+            "title": p.get("title",""), "year": (p.get("date") or "")[:4] or None,
+            "venue":"bioRxiv", "is_oa":True, "pdf":None, "doi":p.get("doi"),
+            "source":"bioRxiv", "url":f"https://doi.org/{p.get('doi')}",
+            "snippet": f"{p.get('authors','')}"})
+    return out
+
 # ---------- Quellen-Register ----------
 SCI = {"openalex": q_openalex, "crossref": q_crossref, "doaj": q_doaj,
-       "europepmc": q_europepmc, "semanticscholar": q_semanticscholar}
+       "europepmc": q_europepmc, "semanticscholar": q_semanticscholar,
+       "arxiv": q_arxiv, "biorxiv": q_biorxiv}
 GENERAL = {"wikipedia": q_wikipedia}
 
 def resolve_sources(mode):
