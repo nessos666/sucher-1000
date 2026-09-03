@@ -37,7 +37,7 @@ _BLOCK_MARKER = re.compile(
     r"(captcha|unusual traffic|access denied|attention required|"
     r"just a moment|verify you are human|anubis|making sure you're not a bot|"
     r"cf-chl|cf-browser-verification|enable javascript and cookies)",
-    re.I,
+    re.IGNORECASE,
 )
 
 # Test-Hook: Tests setzen net._transport zur LAUFZEIT (nie Import-Zeit).
@@ -54,7 +54,7 @@ def _open(url: str, timeout: int = TIMEOUT_S):
     if _transport is not None:
         return _transport.open(url, timeout=timeout)
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310 — nur feste https-API-Endpunkte
         return r.read()
 
 
@@ -172,7 +172,7 @@ def post_json(url, payload: dict, timeout=TIMEOUT_S, retries=RETRIES,
                 resp = _transport.open(url, timeout=timeout)
                 body = _decode_body(resp)
             else:
-                with urllib.request.urlopen(req, timeout=timeout) as r:
+                with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310 — feste https-API
                     body = r.read()
             grund = block_indicator(body, erwartet="json")
             if grund:
@@ -239,7 +239,14 @@ def get_text(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
             if proxy_retry and i == 0 and e.code in (403, 429):
                 proxied = _try_proxy(url, timeout, erwartet="text")
                 if proxied is not None:
-                    return proxied, None
+                    # F1 (Codex-Gesamt): Proxy-Antwort im Fehlerpfad AUCH auf
+                    # Botwall prüfen — Captcha-HTML vom Proxy darf nicht als
+                    # Erfolg gelten (analog zum Block-Pfad oben)
+                    pgrund = block_indicator(proxied, erwartet="text")
+                    if pgrund:
+                        last = f"proxy:{pgrund}"
+                    else:
+                        return proxied, None
         except Exception as e:
             last = str(e)[:80]
             if i < retries:

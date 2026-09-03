@@ -13,16 +13,22 @@ Nutzung:
   python3 sucher_oa.py <doi-ou-URL>          # → druckt beste freie PDF-URL + Quelle
   python3 sucher_oa.py --list                # Quellen anzeigen
 """
-import urllib.request, urllib.parse, json, sys, re
+import re
+import sys
+import urllib.parse
+import urllib.request
 
 EMAIL = "kontakt@sucher1000.example"
 UA = {"User-Agent": f"Sucher1000/ (mailto:{EMAIL})"}
 
-def http_json(url, timeout=25):
+def http_json(url, timeout=8):
+    """Gehärteter JSON-Load (F5/Codex-Gesamt): nutzt net.get_json statt direktem
+    urlopen(25s) — 8s-Cap, Retry, Block-Erkennung, Proxy-Fallback wie überall.
+    Rückgabe: dict/list ODER {"_error": ...} (kompatibel).
+    """
     try:
-        req = urllib.request.Request(url, headers=UA)
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.load(r)
+        import net
+        return net.get_json(url, timeout=timeout)
     except Exception as e:
         return {"_error": str(e)[:80]}
 
@@ -100,7 +106,7 @@ def resolve(query, prefer=("unpaywall","openalex","europepmc")):
         if not fn: continue
         try:
             results.extend(fn(doi))
-        except Exception:
+        except Exception:  # noqa: S110 - bewusster Fallback (optional)
             pass
     return results, doi
 

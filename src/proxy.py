@@ -32,10 +32,11 @@ def _env(name: str) -> str:
         try:
             p = os.path.expanduser("~/.hermes/.env")
             if os.path.exists(p):
-                for line in open(p, encoding="utf-8"):
-                    if line.startswith(name + "="):
-                        v = line.strip().split("=", 1)[1]
-                        break
+                with open(p, encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith(name + "="):
+                            v = line.strip().split("=", 1)[1]
+                            break
         except Exception:
             pass
     return (v or "").strip()

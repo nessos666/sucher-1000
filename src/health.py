@@ -59,8 +59,8 @@ class HealthRegistry:
         try:
             if self.path.exists():
                 return json.loads(self.path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception:  # noqa: S110 - bewusster Fallback (optional)
+            pass  # noqa: S110 - Health-Datei fehlt/kaputt = frischer Start
         return {}
 
     def save(self):

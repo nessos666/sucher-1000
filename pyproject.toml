@@ -1,0 +1,59 @@
+# SUCHER-1000 — Ruff-Konfiguration (Profi-Linting, 2026-09)
+# Zeigt Code-Geruch; bewusste Muster werden hier als Ausnahmen dokumentiert.
+# Laufen:  .venv/bin/ruff check src/ sucher.py scripts/
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# Kern-Regeln: Bugs (F), Style (E/W), Pylint-Verbesserungen, Logik (BLE),
+# Performance (PERF), Datei-Handling (SIM115), subprocess (PLW1510)
+select = [
+    "F",       # Pyflakes: undefinierte Namen, ungenutzte Imports/Variablen
+    "E4", "E9",  # echte Syntax/Logik-Fehler-Klassen (NICHT E7-Stil: kompakte ifs sind gewollt)
+    "W",       # Warnungen
+    "FURB",    # moderne Python-Muster (regex-flag-alias etc.)
+    "PERF",    # Performance-Hinweise
+    "SIM102", "SIM115",  # kollabierbare ifs, open ohne Context
+    "PLW1510", # subprocess ohne check
+    "C401",    # unnötige generator-set
+    "F541",    # f-string ohne Platzhalter
+    "F841",    # ungenutzte Variablen
+    "I001",    # unsortierte Imports
+    "F401",    # ungenutzte Imports
+    "S110",    # try-except-pass OHNE Log = echtes Fehler-Schlucken (nur net/proxy erlaubt)
+]
+
+# Bewusste Ausnahmen (dokumentiert, NICHT still):
+# - EXE001: src/*.py sind Module (kein exec-Bit nötig), nur sucher.py/check.sh/launch.sh sind Einstiege
+# - DTZ005: health_check nutzt lokale Zeit bewusst (kein UTC nötig für Reports)
+# - E722 (bare-except): eine Stelle in sucher_download — gleichbedeutend mit except Exception
+# - E701/E702/E741: kompakte Einzeiler (if x: continue) sind Stil in Such-Funktionen
+# - BLE001 (except Exception): Quellen-Fallback-Design — der except-Block LOGGT den
+#   Fehler (nie still); breites Fangen ist hier gewollt ("eine Quelle crasht nie die Suche")
+ignore = [
+    "EXE001",
+    "DTZ005",
+    "E722",
+    "E701",
+    "E702",
+    "E741",
+    "BLE001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests dürfen offene Datei-Handles + subprocess ohne check nutzen (pragmatisch)
+"tests/*.py" = ["SIM115", "PLW1510"]
+# net.py/proxy.py: try-except-pass IST das Fallback-Design ("nie crashen, _error/None
+# zurück") — Quellen-Härtung. ÜBERALL ANDERS ist stilles pass ein echter Fund!
+"src/net.py" = ["S110"]
+"src/proxy.py" = ["S110"]
+# subprocess-Aufrufe prüfen returncode MANUELL (bewusst kein check=True —
+# Fehlerbehandlung ist anders als Exception-Propagation)
+"sucher.py" = ["PLW1510"]
+"src/sucher_download.py" = ["PLW1510"]
+# PERF401/102/403/C401: Listen-/Dict-Aufbauten sind BEWUSST lesbar geschrieben
+# (Such-Funktionen: Klarheit vor Mikro-Optimierung, kein Hot Path)
+"src/*.py" = ["PERF401", "PERF102", "PERF403", "C401"]
+"scripts/*.py" = ["PERF401", "PERF102", "PERF403", "C401"]

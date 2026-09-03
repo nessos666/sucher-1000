@@ -22,12 +22,16 @@ Regeln:
 - Eine Quelle tot → andere liefern weiter + Fehler wird geloggt
 - Komplett Hermes-unabhängig: nur stdlib + ddgs/requests
 """
-import os, re, sys, json, time, threading, urllib.parse
+import os
+import re
+import sys
+import threading
+import urllib.parse
 
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
 
 # Lauf-Register für Web-Fehler (P6-B2) — analog sucher_universal._QUELLEN_FEHLER
-_WEB_FEHLER = {}
+_WEB_FEHLER: dict = {}
 _WEB_FEHLER_LOCK = threading.Lock()
 
 def _env(name):
@@ -37,10 +41,12 @@ def _env(name):
         try:
             p = os.path.expanduser("~/.hermes/.env")
             if os.path.exists(p):
-                for line in open(p, encoding="utf-8"):
-                    if line.startswith(name + "="):
-                        v = line.strip().split("=", 1)[1]; break
-        except Exception:
+                with open(p, encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith(name + "="):
+                            v = line.strip().split("=", 1)[1]
+                            break
+        except Exception:  # noqa: S110 - bewusster Fallback (optional)
             pass
     return (v or "").strip()
 
@@ -56,7 +62,7 @@ def _log_web_error(quelle, exc):
                 _WEB_FEHLER[quelle] = (msg, alt[1] + 1)
             else:
                 _WEB_FEHLER[quelle] = (msg, 1)
-    except Exception:
+    except Exception:  # noqa: S110 - bewusster Fallback (optional)
         pass
 
 
@@ -99,10 +105,10 @@ def q_bing_html(query, n=8):
     if err:
         _log_web_error("bing", f"Block/Fehler: {err}")
         return []
-    for item in re.findall(r"<item>.*?</item>", xml, re.S):
-        t = re.search(r"<title>(.*?)</title>", item, re.S)
-        l = re.search(r"<link>(.*?)</link>", item, re.S)
-        d = re.search(r"<description>(.*?)</description>", item, re.S)
+    for item in re.findall(r"<item>.*?</item>", xml, re.DOTALL):
+        t = re.search(r"<title>(.*?)</title>", item, re.DOTALL)
+        l = re.search(r"<link>(.*?)</link>", item, re.DOTALL)
+        d = re.search(r"<description>(.*?)</description>", item, re.DOTALL)
         if not t or not l: continue
         title = t.group(1).strip()
         link = l.group(1).strip()
@@ -185,13 +191,13 @@ def q_mojeek(query, n=8):
         _log_web_error("mojeek", f"Block/Fehler: {err}")
         return []
     # Ergebnis-Block: <h2><a class="ob" href="URL">Titel</a></h2> + <p class="s">Snippet</p>
-    for m in re.finditer(r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', text, re.S):
+    for m in re.finditer(r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', text, re.DOTALL):
         link, raw_title = m.group(1), m.group(2)
         title = re.sub(r"<[^>]+>", "", raw_title).strip()
         if not link.startswith("http") or not title:
             continue
         # Snippet: <p class="s"> nach dem h2
-        snip_m = re.search(r'<p class="s">(.*?)</p>', text[m.end():], re.S)
+        snip_m = re.search(r'<p class="s">(.*?)</p>', text[m.end():], re.DOTALL)
         snippet = re.sub(r"<[^>]+>", "", snip_m.group(1)).strip()[:200] if snip_m else ""
         out.append({"title": title, "year": None, "venue": "Web", "is_oa": True,
                     "pdf": None, "doi": None, "source": "Mojeek", "url": link,
@@ -341,7 +347,7 @@ def search_web(query, n=8, only=None, timeout=30):
                 print(f"  ⚠ [{name}] übersprungen (kein {envvar} in Env)", file=sys.stderr)
         try:
             _reg.save()  # auch wenn gleich 0 aktive bleiben — NO_KEY muss persistieren
-        except Exception:
+        except Exception:  # noqa: S110 - bewusster Fallback (optional)
             pass
     if not active:
         return []
@@ -361,10 +367,12 @@ def search_web(query, n=8, only=None, timeout=30):
     t_start = _time.monotonic()
     offen = len(threads)
     quellen_mit_treffern = set()
+    quellen_abgeschlossen = set()  # F3-Codex: nur GEMELDETE Quellen healthen
     while offen > 0 and _time.monotonic() - t_start < timeout:
         try:
             name, payload = ergebnis_q.get(timeout=0.2)
             offen -= 1
+            quellen_abgeschlossen.add(name)
             if payload:
                 quellen_mit_treffern.add(name)
             for it in payload:
@@ -399,7 +407,12 @@ def search_web(query, n=8, only=None, timeout=30):
                         return info
                 return None
 
+            # F3 (Codex-Gesamt): NUR abgeschlossene Quellen committen — Quellen,
+            # die das Budget rissen (nie geantwortet), werden NICHT als HEALTHY
+            # verbucht (Timeout darf nicht als Gesundheit zählen).
             for name in list(active.keys()):
+                if name not in quellen_abgeschlossen:
+                    continue  # Timeout — nicht bewerten
                 fehlerinfo = _alias_fehler(name)
                 hat_fehler = fehlerinfo is not None and fehlerinfo[1] > 0
                 fehlertext = fehlerinfo[0] if fehlerinfo else ""
@@ -408,7 +421,7 @@ def search_web(query, n=8, only=None, timeout=30):
                 else:
                     _reg.record_outcome(name, ok=True)
             _reg.save()
-        except Exception:
+        except Exception:  # noqa: S110 - bewusster Fallback (optional)
             pass
     # P6-B3: deterministisch sortieren (Gewicht + Titel) statt completion-order
     return _web_score_sort(results)

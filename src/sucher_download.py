@@ -13,7 +13,10 @@ Strategie (3 Stufen):
      umgeht Bot-Schutz)
   3. Konvertiert HTML→Markdown (html2text/پandoc) oder speichert PDF
 """
-import urllib.request, subprocess, sys, os, re, time
+import os
+import re
+import subprocess
+import sys
 
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 MIN_OK = 40000  # mind. Bytes für "echten" Inhalt (darunter = Stub)
@@ -44,6 +47,8 @@ def curl_download(url, out_path):
          "-H", "Accept: text/html", "-H", "Accept-Language: en-US,en;q=0.9",
          "-o", out_path, url],
         capture_output=True)
+    if r.returncode != 0:
+        return False  # curl scheiterte (Netz/DNS/Timeout) — kein Block-Check nötig
     return not check_blocked(out_path)
 
 def browser_download(url, out_path, session="sucher_dl"):
@@ -130,7 +135,7 @@ def _html_to_md(src, dst):
                     with open(dst, "w", encoding="utf-8") as f:
                         f.write(r.stdout.decode("utf-8", errors="replace"))
                 return
-        except Exception:
+        except Exception:  # noqa: S110 - bewusster Fallback (optional)
             pass
     raise RuntimeError("kein html2text/w3m/pandoc gefunden")
 
@@ -140,7 +145,8 @@ def main():
         sys.exit(1)
     target = sys.argv[1]
     if target.endswith(".txt") and os.path.exists(target):  # Batch
-        urls = [l.strip() for l in open(target) if l.strip()]
+        with open(target) as f:
+            urls = [l.strip() for l in f if l.strip()]
         outdir = sys.argv[2] if len(sys.argv) > 2 else "."
         os.makedirs(outdir, exist_ok=True)
         for u in urls:

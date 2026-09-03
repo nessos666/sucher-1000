@@ -9,14 +9,20 @@ Universelle Suche für JEDES Thema/Kontext. Mehrere Modi:
   --list           : verfügbare Quellen anzeigen
 Nutzung: python3 sucher_universal.py "suchbegriff" [anzahl] [--modus M] [--quelle Q]
 """
-import urllib.request, urllib.parse, json, time, sys, os, re, threading
+import json
+import os
+import re
+import sys
+import threading
+import urllib.parse
+import urllib.request
 
 UA = {"User-Agent": "Sucher1000/ (mailto:kontakt@sucher1000.example)"}
 OUTDIR = "sucher_ergebnisse"
 os.makedirs(OUTDIR, exist_ok=True)
 
 # ---------- Fehler-Sichtbarkeit (P1): nie still schlucken ----------
-_QUELLEN_FEHLER = {}   # quelle -> (letzter Fehler, anzahl)
+_QUELLEN_FEHLER: dict = {}   # quelle -> (letzter Fehler, anzahl)
 _QUELLEN_FEHLER_LOCK = threading.Lock()  # F5/OpenCode: atomarer Zugriff aus Threads
 
 def _log_quellenfehler(quelle, exc):
@@ -182,10 +188,10 @@ def q_arxiv(query, n=6):
         _log_quellenfehler("arxiv", err)
         return []
     out = []
-    for e in re.findall(r"<entry>.*?</entry>", xml, re.S):
-        t = re.search(r"<title>(.*?)</title>", e, re.S)
+    for e in re.findall(r"<entry>.*?</entry>", xml, re.DOTALL):
+        t = re.search(r"<title>(.*?)</title>", e, re.DOTALL)
         link = re.search(r'<link href="(http[^"]*)"', e)
-        summ = re.search(r"<summary>(.*?)</summary>", e, re.S)
+        summ = re.search(r"<summary>(.*?)</summary>", e, re.DOTALL)
         out.append({
             "title": re.sub(r"\s+"," ",t.group(1).strip()) if t else "",
             "year": None, "venue": "arXiv", "is_oa": True,
@@ -373,10 +379,12 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     offen = len(tasks)
     quellen_mit_treffern = set()
     quellen_mit_fehler = {}   # F6: quelle -> (fehlertext, hatte_fehler) pro Lauf
+    quellen_abgeschlossen = set()  # F2-Codex: nur GEMELDETE Quellen healthen
     while offen > 0 and _time.monotonic() - t_start < budget_s:
         try:
             name, status, payload, hatte_fehler = ergebnis_q.get(timeout=0.2)
             offen -= 1
+            quellen_abgeschlossen.add(name)
             if status == "ok":
                 if payload:
                     quellen_mit_treffern.add(name)
@@ -411,8 +419,11 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     # NICHT das globale _QUELLEN_FEHLER (verwaiste Threads können es verfälschen).
     if _reg is not None:
         try:
-            aktive_quellen = {name for name, _fn, _qy in tasks}
-            for name in aktive_quellen:
+            # F2 (Codex-Gesamt): NUR abgeschlossene Quellen committen. Quellen,
+            # die das Budget rissen (nie geantwortet), werden NICHT bewertet —
+            # vorher wurden sie fälschlich als HEALTHY verbucht (Timeout als
+            # Gesundheit kaschiert, unterlief Cooldown/Selbstheilung).
+            for name in quellen_abgeschlossen:
                 hat_fehler = name in quellen_mit_fehler
                 fehlertext = quellen_mit_fehler.get(name, "")
                 if hat_fehler and name not in quellen_mit_treffern:
@@ -420,7 +431,7 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                 else:
                     _reg.record_outcome(name, ok=True)
             _reg.save()
-        except Exception:
+        except Exception:  # noqa: S110 - bewusster Fallback (optional)
             pass
     # --- Filter: min_year ---
     if min_year:

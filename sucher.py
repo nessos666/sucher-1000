@@ -10,7 +10,13 @@ Nutzung:
   python3 sucher.py --setup        # Umgebung checken + Dependencies
   python3 sucher.py --sources      # Quellen anzeigen
 """
-import os, sys, re, json, time, subprocess, argparse
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
 from datetime import datetime
 
 # Pfade (relativ zu diesem Skript → überlebt Verschieben)
@@ -29,7 +35,11 @@ def log(msg, level="INFO"):
 def ensure_src_imports():
     """Importiert die Module aus src/ (nach dem Umzug)."""
     try:
-        import sucher_universal, sucher_oa, sucher_download, sucher_web, store
+        import store
+        import sucher_download
+        import sucher_oa
+        import sucher_universal
+        import sucher_web
         return sucher_universal, sucher_oa, sucher_download, sucher_web, store
     except ImportError as e:
         log(f"Import-Fehler: {e}", "ERROR"); raise
@@ -85,12 +95,16 @@ def main():
         t2 = threading.Thread(target=_web, daemon=True); t2.start()
         t1.join(timeout=35); t2.join(timeout=35)
         results = ergebnisse.get("studien", []) + ergebnisse.get("web", [])
-        # Dedup über URL
+        # Dedup über URL (F4-Codex: Treffer OHNE URL nicht verwerfen — nur
+        # nicht deduplizieren; vorher verschwanden sie komplett)
         seen, dedup = set(), []
         for r in results:
             url = (r.get("url") or "").lower()
-            if url and url not in seen:
-                seen.add(url); dedup.append(r)
+            if url:
+                if url not in seen:
+                    seen.add(url); dedup.append(r)
+            else:
+                dedup.append(r)  # ohne URL: übernehmen, kein Dedup möglich
         results = dedup
     elif args.modus == "web":
         # Web-Bündel: mehrere Web-Such-Quellen parallel (sucher_web)
@@ -131,7 +145,7 @@ def main():
             import health as _health_mod
             reg = _health_mod.HealthRegistry()
             store_inst.save_health(reg._data)
-        except Exception:
+        except Exception:  # noqa: S110 - bewusster Fallback (optional)
             pass  # Health optional — DB-Hauptzweck ist das Ergebnis-Archiv
         db_stat = f" (DB: {store_inst.anzahl_ergebnisse()} archiviert)"
         print(f"  🗄  SQLite-Archiv: data/sucher.db{db_stat}")

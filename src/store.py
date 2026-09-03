@@ -164,7 +164,7 @@ class Store:
             # Verwaiste Zeilen löschen (F8: DB = Spiegel der JSON-Registry)
             if health_data:
                 conn.execute(
-                    "DELETE FROM provider_health WHERE source NOT IN "
+                    "DELETE FROM provider_health WHERE source NOT IN "  # nosec B608 — parametrisiert (?-Platzhalter)
                     f"({','.join('?' * len(health_data))})",
                     list(health_data.keys()))
             conn.commit()

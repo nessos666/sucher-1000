@@ -12,7 +12,10 @@ Nutzung:
 
 Ergebnis: docs/audits/quellen_health_2026.md (oder --json auf stdout).
 """
-import os, sys, time, json, re
+import json
+import os
+import sys
+import time
 from datetime import datetime
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -51,7 +54,6 @@ def _measure(name, fn):
                         "latenz_s": lat, "fehler": str(e)[:100]}
 
     t = threading.Thread(target=_lauf, daemon=True)
-    t0 = time.time()
     t.start()
     t.join(timeout=TIMEOUT_PER + 2)
     if t.is_alive():
@@ -130,7 +132,7 @@ def main():
                       f"{r['latenz_s']:>5.1f}s{f'  {f}' if f else ''}")
         r = next((x for x in ergebnisse if x["quelle"] == "lokal"), None)
         if r:
-            print(f"\n== LOKAL (Offline-Rettungsanker) ==")
+            print("\n== LOKAL (Offline-Rettungsanker) ==")
             print(f"  [{r['status']:11s}] {r['quelle']:15s} {r['treffer']:2d} Treffer {r['latenz_s']:>5.1f}s")
         print()
 
