@@ -86,8 +86,55 @@ def main():
         return
 
     if not args.query:
-        print(__doc__); return
+        # Laien-UX (Agent-1-Top-1): freundliche Begrüßung statt Usage-Error.
+        # Wenn Terminal (TTY): interaktiven Assistenten anbieten.
+        print("""
+╔══════════════════════════════════════════════════════╗
+║            SUCHER-1000 — der Universal-Sucher         ║
+║  Eine Suche durchsucht 40+ Quellen gleichzeitig:      ║
+║  Web (Google Scholar, YouTube, GitHub, HackerNews,    ║
+║  StackExchange, News, Wikipedia …) + Wissenschaft     ║
+║  (OpenAlex, PubMed, arXiv, ClinicalTrials …)          ║
+╚══════════════════════════════════════════════════════╝
 
+So einfach geht's — schreib einfach deine Frage:
+
+    sucher "Klimawandel Folgen"          ← Studien + Wikipedia
+    sucher "IT Systemhaus München" 5     ← 5 Treffer pro Quelle
+    sucher "KI Agenten" --modus web      ← nur Web-Quellen
+    sucher "Trauma Therapie" --modus alle  ← ALLES (Web + Studien)
+    sucher "PTBS" 3 --quelle pubmed      ← nur eine Quelle
+    sucher --sources                     ← alle Quellen anzeigen
+    sucher --help                        ← alle Optionen
+
+Tipp: ./launch.sh startet ein Auswahl-Menü (ohne Befehle lernen).
+Tipp: .venv/bin/python scripts/sucher_auth.py verwaltet optionale API-Keys.
+""")
+        # Interaktiver Assistent nur wenn echtes Terminal (TTY)
+        try:
+            if sys.stdin.isatty():
+                antwort = input("\nMöchtest du interaktiv suchen? [j/N]: ").strip().lower()
+                if antwort in ("j", "ja", "y", "yes"):
+                    args.query = input("Was suchst du? ").strip() or None
+                    if args.query:
+                        print("Modi: 1=Alles  2=Web  3=Studien")
+                        m = input("Modus [1]: ").strip()
+                        args.modus = {"" : "alle", "1": "alle", "2": "web",
+                                      "3": "studien"}.get(m, "alle")
+                        n = input("Treffer pro Quelle [5]: ").strip()
+                        try:
+                            args.n = int(n) if n else 5
+                        except ValueError:
+                            args.n = 5
+                        return _suche(args)  # untere Hälfte läuft
+        except (EOFError, KeyboardInterrupt):
+            pass
+        return
+
+    return _suche(args)
+
+
+def _suche(args):
     su, soa, sdl, sw, st = ensure_src_imports()
     os.makedirs(args.out, exist_ok=True)
 
