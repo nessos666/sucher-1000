@@ -476,6 +476,182 @@ def q_bing_news(query, n=8):
     return out
 
 
+# ---------- Block 7: StackExchange / Wikis / OpenLibrary / Archive / GitHub ----------
+def q_stackexchange(query, n=8, site="stackoverflow"):
+    """StackExchange (StackOverflow + alle SE-Sites), key-frei JSON.
+
+    Live verifiziert 03.09.2026: 300 Req/Tag anonym (10k mit kostenlosem
+    App-Key). site= erlaubt Sub-Engines (superuser, serverfault, …).
+    """
+    import html as _html
+    try:
+        import net
+    except ImportError:
+        _log_web_error("stackexchange", "net fehlt")
+        return []
+    out = []
+    url = ("https://api.stackexchange.com/2.3/search/advanced?"
+           + urllib.parse.urlencode(
+               {"site": site, "q": query, "pagesize": n,
+                "order": "desc", "sort": "relevance"}))
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("stackexchange", j["_error"])
+        return []
+    for it in j.get("items", [])[:n]:
+        title = it.get("title") or ""
+        if not title:
+            continue
+        tags = ",".join(it.get("tags") or [])
+        snip = f"Score {it.get('score')}"
+        if tags:
+            snip += f" · [{tags}]"
+        out.append({"title": _html.unescape(title), "year": None,
+                    "venue": "StackExchange", "is_oa": True, "pdf": None,
+                    "doi": None, "source": "StackExchange",
+                    "url": it.get("link"), "snippet": snip})
+    return out
+
+
+def q_wikis(query, n=8):
+    """Wikiquote + Wikinews + Wikisource (DE+EN) via MediaWiki-API, key-frei.
+
+    Live verifiziert 03.09.2026: alle 6 Projekte HTTP 200. Ein Adapter,
+    mehrere Sub-Quellen — tote Projekte werden übersprungen (nicht fatal).
+    """
+    import html as _html
+    try:
+        import net
+    except ImportError:
+        _log_web_error("wikis", "net fehlt")
+        return []
+    out = []
+    projekte = [("de", "wikiquote"), ("en", "wikiquote"), ("de", "wikinews"),
+                ("en", "wikinews"), ("de", "wikisource"), ("en", "wikisource")]
+    for lang, proj in projekte:
+        try:
+            url = f"https://{lang}.{proj}.org/w/api.php?" + urllib.parse.urlencode({
+                "action": "query", "list": "search", "srsearch": query,
+                "srlimit": max(1, min(n, 5)), "format": "json"})
+            j = net.get_json(url, timeout=12)
+            if "_error" in j:
+                _log_web_error("wikis", f"{lang}.{proj}: {j['_error']}")
+                continue
+            for r in j.get("query", {}).get("search", [])[:n]:
+                t = r.get("title", "")
+                if not t:
+                    continue
+                page_url = (f"https://{lang}.{proj}.org/wiki/"
+                            + urllib.parse.quote(t.replace(" ", "_")))
+                snip = re.sub(r"<[^>]+>", "", r.get("snippet", ""))[:150]
+                out.append({"title": t, "year": None, "venue": f"{proj.capitalize()}",
+                            "is_oa": True, "pdf": None, "doi": None,
+                            "source": "Wikis", "url": page_url, "snippet": snip})
+        except Exception as e:
+            _log_web_error("wikis", f"{lang}.{proj}: {e}")
+            continue
+    return out
+
+
+def q_openlibrary(query, n=8):
+    """OpenLibrary (Bücher), key-frei JSON. Live: /search.json HTTP 200."""
+    try:
+        import net
+    except ImportError:
+        _log_web_error("openlibrary", "net fehlt")
+        return []
+    out = []
+    url = "https://openlibrary.org/search.json?" + urllib.parse.urlencode(
+        {"q": query, "limit": n,
+         "fields": "title,author_name,first_publish_year,key"})
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("openlibrary", j["_error"])
+        return []
+    for d in j.get("docs", [])[:n]:
+        title = d.get("title") or ""
+        if not title:
+            continue
+        authors = d.get("author_name") or []
+        author = authors[0] if authors else ""
+        key = d.get("key") or ""
+        link = f"https://openlibrary.org{key}" if key else None
+        out.append({"title": title, "year": d.get("first_publish_year"),
+                    "venue": "OpenLibrary", "is_oa": True, "pdf": None,
+                    "doi": None, "source": "OpenLibrary",
+                    "url": link, "snippet": author})
+    return out
+
+
+def q_archive(query, n=8):
+    """Internet Archive advancedsearch (Solr-JSON), key-frei.
+
+    Live verifiziert 03.09.2026: numFound 116k für 'linux'. Details-Seite:
+    archive.org/details/<identifier>.
+    """
+    try:
+        import net
+    except ImportError:
+        _log_web_error("archive", "net fehlt")
+        return []
+    out = []
+    # fl[]= Felder via urlencode mit leeren Klammern
+    url = ("https://archive.org/advancedsearch.php?q="
+           + urllib.parse.quote(query)
+           + "&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=year"
+             f"&rows={n}&output=json")
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("archive", j["_error"])
+        return []
+    for d in j.get("response", {}).get("docs", [])[:n]:
+        title = d.get("title") or ""
+        ident = d.get("identifier") or ""
+        if not title or not ident:
+            continue
+        yr = d.get("year")
+        try:
+            yr = int(str(yr)[:4]) if yr else None
+        except (TypeError, ValueError):
+            yr = None
+        out.append({"title": title, "year": yr, "venue": "Internet Archive",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "Archive",
+                    "url": f"https://archive.org/details/{ident}",
+                    "snippet": f"Archive.org · {ident}"})
+    return out
+
+
+def q_github(query, n=8):
+    """GitHub-Suche (Repos), key-frei JSON. Live: 10 Suchanfragen/min anonym."""
+    import html as _html
+    try:
+        import net
+    except ImportError:
+        _log_web_error("github", "net fehlt")
+        return []
+    out = []
+    url = "https://api.github.com/search/repositories?" + urllib.parse.urlencode(
+        {"q": query, "per_page": n, "sort": "stars"})
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("github", j["_error"])
+        return []
+    for it in j.get("items", [])[:n]:
+        name = it.get("full_name") or ""
+        if not name:
+            continue
+        desc = (it.get("description") or "")[:150]
+        snip = f"⭐ {it.get('stargazers_count')}"
+        if desc:
+            snip = desc + " · " + snip
+        out.append({"title": name, "year": None, "venue": "GitHub",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "GitHub", "url": it.get("html_url"),
+                    "snippet": snip})
+    return out
+
+
 # Key-Quellen → Env-Variablen (für NO_KEY-Handling)
 KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
                    "serpapi": "SERPAPI_API_KEY"}
@@ -484,14 +660,18 @@ KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
 WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
        "wikipedia_web": q_wikipedia_web, "tavily": q_tavily, "exa": q_exa,
        "serpapi": q_serpapi, "hn": q_hn, "google_news": q_google_news,
-       "bing_news": q_bing_news}
+       "bing_news": q_bing_news, "stackexchange": q_stackexchange,
+       "wikis": q_wikis, "openlibrary": q_openlibrary, "archive": q_archive,
+       "github": q_github}   # Block 7 (Agenten-Runde 2, live geprüft 03.09.2026)
 
 # P6-B3: Web-Quellen-Gewichte (für deterministische Sortierung — nicht
 # completion-order der Threads). Bing hinten: Junk-Problem (Juli-Audit ⭐⭐).
 # Block 5: HackerNews hoch (relevante Tech-Treffer), News-Feeds mittel.
+# Block 7: StackExchange/GitHub hoch (Community-Qualität), Archive/Bücher mittel.
 _WEB_WEIGHT = {"ddgs": 1.0, "mojeek": 1.0, "wikipedia": 0.9, "tavily": 0.8,
                "exa": 0.8, "serpapi": 0.9, "bing": 0.4, "hackernews": 0.95,
-               "googlenews": 0.7, "bingnews": 0.5}
+               "googlenews": 0.7, "bingnews": 0.5, "stackexchange": 0.95,
+               "wikis": 0.7, "openlibrary": 0.7, "archive": 0.7, "github": 0.9}
 
 
 def _web_score_sort(results):
