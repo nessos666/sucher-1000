@@ -58,9 +58,19 @@ Einfacher: `./launch.sh` (Menü: Web / Studien / Alles).
 
 ## 🔑 Optionale Keys (nicht nötig zum Loslegen)
 
-Alle Kern-Quellen sind key-frei. Zusätzliche Quellen (Tavily, Exa, SerpApi)
-aktivierst du mit Keys — siehe `.env.example`. Fehlt ein Key, wird die Quelle
-übersprungen (Meldung, kein Fehler).
+Alle Kern-Quellen sind key-frei. Zusätzliche Quellen (Tavily, Exa, SerpApi,
+Reddit, KnowledgeGraph, GoogleBooks, Serper, You.com) aktivierst du mit Keys —
+**am einfachsten über den Assistenten** (Eingabe verdeckt + Live-Test):
+
+```bash
+.venv/bin/python scripts/sucher_auth.py            # Status aller Key-Quellen
+.venv/bin/python scripts/sucher_auth.py --add serper  # Key setzen + testen
+```
+
+Oder manuell: siehe `.env.example` — Keys kommen aus der Umgebung, aus
+`~/.hermes/.env` ODER `~/.config/sucher1000/keys.env` (vom Assistenten
+geschrieben, chmod 600). Fehlt ein Key, wird die Quelle übersprungen
+(Meldung mit Key-URL, kein Fehler).
 
 ## 🧠 Warum „funktioniert IMMER"?
 
