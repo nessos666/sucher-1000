@@ -27,10 +27,21 @@ def http_json(url, timeout=25):
         return {"_error": str(e)[:80]}
 
 def extract_doi(query):
-    """Extrahiert DOI aus URL oder Original-DOI."""
+    """Extrahiert DOI aus URL oder Original-DOI.
+
+    F7 (OpenCode-Gesamt): schneidet Query-Parameter (?/&/#) ab — vorher blieb
+    '?foo=bar' am DOI hängen, wenn die URL Parameter hatte.
+    """
     if not query: return None
     m = re.search(r"10\.\d{4,9}/[^\s\"']+", query)
-    return m.group(0).rstrip('.,)') if m else (query if query.startswith("10.") else None)
+    if not m:
+        return query if query.startswith("10.") else None
+    doi = m.group(0)
+    # Trailing Query/Fragment abschneiden: ?foo &bar #baz
+    for sep in ("?", "&", "#"):
+        if sep in doi:
+            doi = doi.split(sep)[0]
+    return doi.rstrip(".,)")
 
 def q_unpaywall(doi):
     """Unpaywall: beste freie PDF-URL."""
