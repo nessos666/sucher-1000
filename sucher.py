@@ -29,8 +29,8 @@ def log(msg, level="INFO"):
 def ensure_src_imports():
     """Importiert die Module aus src/ (nach dem Umzug)."""
     try:
-        import sucher_universal, sucher_oa, sucher_download
-        return sucher_universal, sucher_oa, sucher_download
+        import sucher_universal, sucher_oa, sucher_download, sucher_web
+        return sucher_universal, sucher_oa, sucher_download, sucher_web
     except ImportError as e:
         log(f"Import-Fehler: {e}", "ERROR"); raise
 
@@ -38,7 +38,7 @@ def main():
     ap = argparse.ArgumentParser(description="SUCHER 1000 — großes Studien-Tool")
     ap.add_argument("query", nargs="?", help="Suchbegriff")
     ap.add_argument("n", nargs="?", type=int, default=8, help="Anzahl (default 8)")
-    ap.add_argument("--modus", default="universal", help="studien|universal|alle")
+    ap.add_argument("--modus", default="universal", help="studien|universal|alle|web")
     ap.add_argument("--out", default=DEFAULT_OUT, help="Zielordner")
     ap.add_argument("--download", action="store_true", help="Automatisch frei ladbare herunterladen")
     ap.add_argument("--setup", action="store_true", help="Umgebung prüfen")
@@ -47,7 +47,7 @@ def main():
 
     if args.setup:
         print("=== SUCHER 1000 — Setup-Check ===")
-        for mod in ("sucher_universal","sucher_oa","sucher_download"):
+        for mod in ("sucher_universal","sucher_oa","sucher_download","sucher_web"):
             try:
                 __import__(mod); print(f"  ✓ {mod}")
             except ImportError:
@@ -57,12 +57,15 @@ def main():
     if args.sources:
         src_list = os.path.join(SRC, "sucher_universal.py")
         subprocess.run(["python3", src_list, "--list"])
+        print("\n  WEB-BÜNDEL (Multi-Engine, --modus web):")
+        subprocess.run([sys.executable, "-c",
+            "import sys; sys.path.insert(0, '" + SRC + "'); import sucher_web; sucher_web.list_web()"])
         return
 
     if not args.query:
         print(__doc__); return
 
-    su, soa, sdl = ensure_src_imports()
+    su, soa, sdl, sw = ensure_src_imports()
     os.makedirs(args.out, exist_ok=True)
 
     t0 = time.time()
@@ -70,7 +73,11 @@ def main():
 
     # 1) SUCHE
     log(f"Suche start: {args.query} (modus={args.modus})")
-    results = su.search(args.query, args.n, mode=args.modus)
+    if args.modus == "web":
+        # Web-Bündel: mehrere Web-Such-Quellen parallel (sucher_web)
+        results = sw.search_web(args.query, args.n)
+    else:
+        results = su.search(args.query, args.n, mode=args.modus)
     if not results:
         print("  Keine Treffer — Netzwerk/Quellen gerade evtl. instabil (560/429).")
         log("Suche: 0 Treffer (Quellen evtl. down)", "WARN")
