@@ -356,6 +356,12 @@ def search_web(query, n=8, only=None, timeout=30):
     threads = []
     for name, fn in active.items():
         def _arbeite(_n=name, _f=fn):
+            # Rate-Limit (Shiraberu): pro Quelle drosseln
+            try:
+                import ratelimit
+                ratelimit.throttle(_n)
+            except Exception:
+                pass
             try:
                 ergebnis_q.put((_n, _f(query, n)))
             except Exception as e:

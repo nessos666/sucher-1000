@@ -354,6 +354,13 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     threads = []
     for name, fn, qy in tasks:
         def _run(name=name, fn=fn, qy=qy):
+            # Rate-Limit (Shiraberu): pro Quelle drosseln — DDG/Bing/Mojeek
+            # blocken bei Request-Fluten. Läuft im Worker (blockiert Hauptloop nicht)
+            try:
+                import ratelimit
+                ratelimit.throttle(name)
+            except Exception:
+                pass
             # F6 (OpenCode): Fehler-Zählerstand VOR dem Aufruf merken — der
             # Worker meldet seinen EIGENEN Fehlerstatus im Tupel mit, statt dass
             # der Health-Commit das globale Register liest (das verwaiste
