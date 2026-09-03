@@ -35,12 +35,10 @@ SUCHER-1000 (EIGENES venv, EIGENE Dependencies, 0 Hermes-Importe)
 │   OpenAlex · Crossref · DOAJ · EuropePMC · Semantic Scholar · arXiv · PubMed
 │   Wikipedia · Wikidata · Lokal (HAUPTLAGER)
 │
-├── Stufe 2 — MIT KEY, KARTE-FREI (verlässlich, optional)
-│   Tavily (1000/Monat gratis, keine Karte) — Web-Suche + Extract
-│   └── Key wird NUR aus Env-Var gelesen; fehlt er → Stufe 2 übersprungen, Stufe 1+3 laufen
-│
-├── Stufe 3 — FALLBACK (ohne Key)
-│   ddgs (DuckDuckGo Python-Lib) — Web-Suche, wenn Tavily fehlt/tot
+├── Stufe 2 — WEB-BÜNDEL Multi-Engine (MEHRERE Web-Suchen parallel)
+│   Key-frei IMMER: ddgs · Bing-HTML · Mojeek · Wikipedia
+│   Key-optional:   Tavily (Env, 1000/Monat, keine Karte) · Exa (Env)
+│   → ein Befehl durchsucht ALLE, sammelt aus allen (David-Korrektur 03.09)
 │
 └── Resilienz-Schicht
     ├── Health-Check je Quelle (erreichbar? JSON? Treffer?) — tote Quellen melden + überspringen
@@ -75,12 +73,31 @@ SUCHER-1000 (EIGENES venv, EIGENE Dependencies, 0 Hermes-Importe)
 - Verifikation: läuft in frischem venv ohne Hermes-Umgebung
 - **Commit:** venv + Launcher
 
-### P4 — Web-Suche-Stufe 2+3 (S3) — Herzstück „höchstes Level"
-- `q_tavily()`: Key aus Env (`TAVILY_API_KEY`); fehlt → Quelle inaktiv (Meldung, kein Fehler)
-- `q_ddgs()`: DuckDuckGo-Lib als Free-Fallback, immer verfügbar
-- Neue Modi: `--modus web` (nur Tavily/ddgs/Wikipedia) und `--modus alle` erweitert
-- RED-Test: ohne Key → tavily übersprungen, ddgs liefert; mit Key → beide
-- **Commit:** Web-Suche integriert
+### P4 — Web-Suche Multi-Engine (S3) — Herzstück „höchstes Level"
+
+**Davids Korrektur (03.09.2026):** NICHT eine Web-Suche (Tavily ODER ddgs), sondern
+**ein Web-Quellen-BÜNDEL** — ein Befehl durchsucht MEHRERE Web-Engines parallel und
+sammelt aus allen. Mehr Qualität durch Redundanz.
+
+**Web-Quellen-Register (`WEB`):**
+| Quelle | Key | Karte | Status |
+|--------|-----|-------|--------|
+| `q_ddgs()` — DuckDuckGo-Lib | ❌ | ❌ | IMMER aktiv |
+| `q_bing_html()` — Bing via curl+UA | ❌ | ❌ | IMMER aktiv |
+| `q_mojeek()` — Mojeek HTML | ❌ | ❌ | IMMER aktiv |
+| `q_wikipedia()` — Wikipedia DE+EN | ❌ | ❌ | IMMER aktiv (existiert) |
+| `q_tavily()` — Tavily Web-Suche | Env-Key | ❌ | nur wenn Key gesetzt |
+| `q_exa()` — Exa semantisch (optional) | Env-Key | ❌ | nur wenn Key gesetzt |
+
+**Nicht im Bündel:** Brave (Karte-Pflicht seit 02/2026), Google-SERP-Scraper (Rechtsrisiko).
+
+**Kern-Logik:**
+- Alle Key-freien Quellen laufen IMMER (Grundlast)
+- Key-Quellen laufen NUR wenn Key in Env (`TAVILY_API_KEY`/`EXA_API_KEY`) — fehlt → Meldung „übersprungen", kein Fehler
+- Quelle tot → andere liefern weiter + Fehler wird geloggt (P1-Logging)
+- **Parallel** via ThreadPool (P2) → Gesamtzeit = langsamste Quelle, NICHT Summe
+- Neue Modi: `--modus web` (nur WEB-Register) und `--modus alle` erweitert um WEB
+- RED-Test: 1 Web-Quelle tot → andere liefern + Fehler sichtbar
 
 ### P5 — SQLite-Persistenz (Ergebnis-Source-of-Truth)
 - `sucher.db`: Tabelle `ergebnisse` (query, ts, quelle, title, url, year, doi, is_oa, json)
@@ -98,13 +115,6 @@ SUCHER-1000 (EIGENES venv, EIGENE Dependencies, 0 Hermes-Importe)
 - **Kein** Brave als Fundament (Karte-Pflicht seit 2026 — Recherche-Beleg)
 - **Kein** DeepWeb_Tool-Umbau (bleibt Discovery-„Universum")
 - **Kein** Hermes-eigener web_search-Umbau (der ist Config, nicht SUCHER)
-
-## Offene Entscheidung für David (vor P4)
-
-Web-Suche braucht Klarheit:
-- (a) Tavily-Key in Env setzen (1000/Monat, karte-frei) → beste Qualität
-- (b) Nur ddgs (0€, kein Key) → reicht oft, blockt gelegentlich
-- (c) Beides (ddgs primary, tavily optional) → robusteste Variante (Empfehlung)
 
 ## Erfolgskriterium (am Ende messbar)
 
