@@ -847,6 +847,172 @@ def q_reddit(query, n=8):
                     "doi": None, "source": "Reddit",
                     "url": link, "snippet": snip})
     return out
+def q_google_scholar(query, n=8):
+    """Google Scholar (HTML-Parsing), key-frei — captcha-Gefahr bei Serien.
+
+    Live verifiziert 03.09.2026: HTTP 200, 10 Treffer, 0 Captcha. Parser:
+    gs_ri-Blöcke → h3 → <a href>Titel</a>, Jahr aus gs_a (letzte 4-stellige
+    Zahl). Scholar blockt nach Dutzenden Requests → Health-Cooldown hilft.
+    """
+    import html as _html
+    try:
+        import net
+    except ImportError:
+        _log_web_error("google_scholar", "net fehlt")
+        return []
+    out = []
+    url = "https://scholar.google.com/scholar?" + urllib.parse.urlencode(
+        {"hl": "de", "q": query})
+    text, err = net.get_text(url, timeout=12)
+    if err:
+        _log_web_error("google_scholar", f"Block/Fehler: {err}")
+        return []
+    blocks = re.findall(r'<div class="gs_ri">(.*?)(?=<div class="gs_r|</div>\s*</div>)',
+                        text, re.DOTALL)
+    if not blocks:  # Fallback: bis ans Ende
+        blocks = re.findall(r'<div class="gs_ri">(.*)', text, re.DOTALL)[:1]
+    for b in blocks[:n]:
+        h3 = re.search(r"<h3[^>]*>(.*?)</h3>", b, re.DOTALL)
+        if not h3:
+            continue
+        a = re.search(r'href="([^"]+)"[^>]*>(.*?)</a>', h3.group(1), re.DOTALL)
+        if not a:
+            continue
+        raw_url = _html.unescape(a.group(1))
+        title = re.sub(r"<[^>]+>", "", a.group(2))
+        title = re.sub(r"\[(BUCH|B|CITATION|ZITATION|PDF)\]", "", title).strip()
+        if not title:
+            continue
+        year = None
+        gsa = re.search(r'<div class="gs_a">(.*?)</div>', b, re.DOTALL)
+        if gsa:
+            ym = re.search(r"\b(20\d{2})\b", gsa.group(1))
+            if ym:
+                year = int(ym.group(1))
+        snip_m = re.search(r'<div class="gs_rs">(.*?)</div>', b, re.DOTALL)
+        snip = re.sub(r"<[^>]+>", "", snip_m.group(1))[:200] if snip_m else ""
+        out.append({"title": title, "year": year, "venue": "Google Scholar",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "Scholar", "url": raw_url, "snippet": snip})
+    return out
+
+
+def q_autosuggest(query, n=8):
+    """Google-Autosuggest (Suchvorschläge), key-frei JSON.
+
+    Live verifiziert 03.09.2026: suggestqueries.google.com → JSON-Array
+    [query, [suggestions…]]. Liefert Vorschläge als Treffer — nützlich für
+    Themen-Erkundung/Keyword-Ideen.
+    """
+    import json as _json
+    import net as _net
+    out = []
+    url = "https://suggestqueries.google.com/complete/search?" + urllib.parse.urlencode(
+        {"client": "firefox", "q": query, "hl": "de"})
+    # Google liefert charset=ISO-8859-1 — net.get_json dekodiert utf-8 (kaputt).
+    # Daher Bytes direkt holen (respektiert Test-Hook) und latin-1 dekodieren.
+    try:
+        raw = _net._decode_body(_net._open(url, timeout=12))
+        j = _json.loads(raw.decode("iso-8859-1"))
+    except Exception as e:
+        _log_web_error("autosuggest", str(e)[:80])
+        return []
+    if not isinstance(j, list) or len(j) < 2:
+        return []
+    for sugg in j[1][:n]:
+        s = str(sugg)
+        if not s:
+            continue
+        out.append({"title": s, "year": None, "venue": "Google Suggest",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "GoogleSuggest",
+                    "url": "https://www.google.com/search?q="
+                           + urllib.parse.quote(s),
+                    "snippet": f"Vorschlag zu: {query}"})
+    return out
+
+
+def q_knowledgegraph(query, n=8):
+    """Google Knowledge Graph (semantische Entitäten), Key-optional.
+
+    100.000 Read-Calls/Tag gratis (offiziell). Key: GOOGLE_KG_API_KEY.
+    Ohne Key: übersprungen (NO_KEY-Mechanik).
+    """
+    key = _env("GOOGLE_KG_API_KEY")
+    if not key:
+        print("  ⚠ [knowledgegraph] übersprungen (kein GOOGLE_KG_API_KEY — "
+              "kostenlos: console.cloud.google.com)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("knowledgegraph", "net fehlt")
+        return []
+    out = []
+    url = "https://kgsearch.googleapis.com/v1/entities:search?" + urllib.parse.urlencode(
+        {"query": query, "key": key, "limit": n, "languages": "de"})
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("knowledgegraph", j["_error"])
+        return []
+    for el in j.get("itemListElement", [])[:n]:
+        r = el.get("result") or {}
+        name = r.get("name") or ""
+        if not name:
+            continue
+        desc = r.get("description") or ""
+        dd = (r.get("detailedDescription") or {}).get("url")
+        types = r.get("@type") or []
+        tstr = ",".join(types) if isinstance(types, list) else str(types)
+        snip = " · ".join(x for x in [desc, tstr] if x)
+        out.append({"title": name, "year": None, "venue": "Knowledge Graph",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "KnowledgeGraph", "url": dd or None,
+                    "snippet": snip})
+    return out
+
+
+def q_google_books(query, n=8):
+    """Google Books API, Key-optional (anonym = 429 geteiltes Tagesquota).
+
+    Key: GOOGLE_BOOKS_API_KEY (kostenloser Google-Cloud-Key, ~1000 Req/Tag).
+    Ohne Key: übersprungen.
+    """
+    key = _env("GOOGLE_BOOKS_API_KEY")
+    if not key:
+        print("  ⚠ [google_books] übersprungen (kein GOOGLE_BOOKS_API_KEY — "
+              "kostenlos: console.cloud.google.com)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("google_books", "net fehlt")
+        return []
+    out = []
+    url = "https://www.googleapis.com/books/v1/volumes?" + urllib.parse.urlencode(
+        {"q": query, "key": key, "maxResults": min(n, 40)})
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("google_books", j["_error"])
+        return []
+    for it in j.get("items", [])[:n]:
+        vi = it.get("volumeInfo") or {}
+        title = vi.get("title") or ""
+        if not title:
+            continue
+        yr = None
+        pd = vi.get("publishedDate") or ""
+        if len(pd) >= 4 and pd[:4].isdigit():
+            yr = int(pd[:4])
+        authors = vi.get("authors") or []
+        author = ", ".join(authors[:2])
+        out.append({"title": title, "year": yr, "venue": "Google Books",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "GoogleBooks", "url": vi.get("infoLink"),
+                    "snippet": author})
+    return out
+
+
 def q_youtube(query, n=8):
     """YouTube-Suche via InnerTube (Google-Kleinod, key-frei).
 
@@ -903,7 +1069,9 @@ def q_youtube(query, n=8):
 
 
 KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
-                   "serpapi": "SERPAPI_API_KEY", "reddit": "REDDIT_CLIENT_ID"}
+                   "serpapi": "SERPAPI_API_KEY", "reddit": "REDDIT_CLIENT_ID",
+                   "knowledgegraph": "GOOGLE_KG_API_KEY",
+                   "google_books": "GOOGLE_BOOKS_API_KEY"}
 
 # ---------- Register ----------
 WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
@@ -913,7 +1081,9 @@ WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
        "wikis": q_wikis, "openlibrary": q_openlibrary, "archive": q_archive,
        "github": q_github, "huggingface": q_huggingface,
        "patents": q_patents, "reddit": q_reddit,
-       "youtube": q_youtube}  # Block 7+8+9 (Agenten-Runden 2+3)
+       "youtube": q_youtube, "google_scholar": q_google_scholar,
+       "autosuggest": q_autosuggest, "knowledgegraph": q_knowledgegraph,
+       "google_books": q_google_books}  # Block 7-10 (Agenten-Runden 2+3)
 
 # P6-B3: Web-Quellen-Gewichte (für deterministische Sortierung — nicht
 # completion-order der Threads). Bing hinten: Junk-Problem (Juli-Audit ⭐⭐).
@@ -925,7 +1095,8 @@ _WEB_WEIGHT = {"ddgs": 1.0, "mojeek": 1.0, "wikipedia": 0.9, "tavily": 0.8,
                "googlenews": 0.7, "bingnews": 0.5, "stackexchange": 0.95,
                "wikis": 0.7, "openlibrary": 0.7, "archive": 0.7, "github": 0.9,
                "huggingface": 0.95, "googlepatents": 0.7, "reddit": 0.75,
-               "youtube": 0.8}
+               "youtube": 0.8, "scholar": 0.95, "googlesuggest": 0.3,
+               "knowledgegraph": 0.85, "googlebooks": 0.7}
 
 
 def _web_score_sort(results):

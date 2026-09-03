@@ -503,6 +503,35 @@ def q_core(query, n=8):
     return out
 
 
+# ---------- Block 10: DOAB (offene Bücher, DSpace-REST) ----------
+def q_doab(query, n=8):
+    """DOAB — Directory of Open Access Books (peer-reviewte OA-Bücher), key-frei.
+
+    Live verifiziert 03.09.2026: /rest/search?query=… HTTP 200 (DSpace 6.3).
+    handle → doabooks.org-Buchseite.
+    """
+    url = "https://directory.doabooks.org/rest/search?" + urllib.parse.urlencode(
+        {"query": query, "expand": ""})
+    j = http_json(url)
+    if _check_fehler("doab", j): return []
+    out = []
+    if not isinstance(j, list):
+        return []
+    for d in j[:n]:
+        title = d.get("name") or ""
+        handle = d.get("handle") or ""
+        if not title:
+            continue
+        # handle "20.500.12854/90167" → https://directory.doabooks.org/handle/…
+        link = (f"https://directory.doabooks.org/handle/{handle}"
+                if handle else None)
+        out.append({"title": title, "year": None, "venue": "DOAB",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "DOAB", "url": link, "snippet": "",
+                    "cites": 0, "relevance": 0})
+    return out
+
+
 def q_lokal(query, n=10, zeitlimit_s=3):
     """LOKAL-SUCHE: durchsucht Davids HAUPTLAGER-Wissensbasis (Datei-NAMEN).
     Findet, was DAVID schon hat — vermeidet Doppelrecherche.
@@ -544,7 +573,7 @@ SCI = {"openalex": q_openalex, "crossref": q_crossref, "doaj": q_doaj,
        "zenodo": q_zenodo, "datacite": q_datacite, "dblp": q_dblp,
        "openaire": q_openaire,   # Block 6 (Agenten-Runde 2, live geprüft 03.09.2026)
        "clinicaltrials": q_clinicaltrials, "openreview": q_openreview,
-       "osf": q_osf, "core": q_core}  # Block 9 (Agenten-Runde 3)
+       "osf": q_osf, "core": q_core, "doab": q_doab}  # Block 9+10
 GENERAL = {"wikipedia": q_wikipedia, "wikidata": q_wikidata, "lokal": q_lokal}
 
 def resolve_sources(mode):
@@ -784,6 +813,7 @@ def _score_sort(results):
                 "PubMed":0.9, "arXiv":0.5, "SemanticScholar":0.8,
                 "Zenodo":0.7, "DataCite":0.7, "DBLP":0.8, "OpenAIRE":0.7,
                 "ClinicalTrials":0.8, "OpenReview":0.8, "OSF":0.6, "CORE":0.8,
+                "DOAB":0.6,
                 "Wikipedia":0.3, "Wikidata":0.3, "Lokal":0.6}
     def score(r):
         cites = r.get("cites") or 0
