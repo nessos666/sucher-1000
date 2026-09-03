@@ -727,7 +727,7 @@ def q_patents(query, n=8):
             # ohne "patent/patent" oder "/en/en" zu duplizieren
             pid_clean = pid
             if pid_clean.startswith("patent/"):
-                pid_clean = pid_clean[len("patent/"):]
+                pid_clean = pid_clean.removeprefix("patent/")
             pid_clean = pid_clean.rstrip("/").removesuffix("/en")
             pid_clean = pid_clean.removesuffix("/en")
             year = None
