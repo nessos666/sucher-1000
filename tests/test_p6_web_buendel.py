@@ -233,3 +233,49 @@ def test_no_key_mit_key_heilt_sich(tmp_path, monkeypatch):
         web.WEB, web._env = orig_web, orig_env
 
     assert calls["exa"] == 1, "Mit Key muss die NO_KEY-Quelle wieder laufen (Selbstheilung)"
+
+
+# --- P6-B3: deterministische Sortierung + Quellen-Gewichte ---
+
+def test_web_sortierung_deterministisch():
+    """Gleiche Ergebnisse → gleiche Reihenfolge (nicht completion-order-abhängig)."""
+    res = [
+        {"title": "A-Tavily", "url": "http://t.de", "source": "Tavily"},
+        {"title": "B-ddgs", "url": "http://d.de", "source": "ddgs"},
+        {"title": "C-Bing", "url": "http://b.de", "source": "Bing"},
+    ]
+    r1 = web._web_score_sort(res)
+    r2 = web._web_score_sort(list(reversed(res)))
+    assert [x["url"] for x in r1] == [x["url"] for x in r2], \
+        "Sortierung muss unabhängig von Eingabe-Reihenfolge sein"
+
+
+def test_web_sortierung_bing_hinten():
+    """Bing (Junk-Problem) muss hinter ddgs/Tavily landen."""
+    res = [
+        {"title": "Bing-Treffer", "url": "http://bing.de", "source": "Bing"},
+        {"title": "ddgs-Treffer", "url": "http://ddgs.de", "source": "ddgs"},
+        {"title": "Tavily-Treffer", "url": "http://tavily.de", "source": "Tavily"},
+    ]
+    sorted_res = web._web_score_sort(res)
+    sources = [r["source"] for r in sorted_res]
+    assert sources[0] in ("ddgs", "Mojeek", "Tavily", "Wikipedia", "Exa"), \
+        f"ddgs/mojeek muss vorn sein, ist: {sources}"
+    assert sources[-1] == "Bing", f"Bing muss hinten sein, ist: {sources}"
+
+
+def test_search_web_gibt_sortiert_zurueck(tmp_path, monkeypatch):
+    """search_web liefert sortierte Ergebnisse (nicht Thread-Ankunfts-Reihenfolge)."""
+    import health
+    monkeypatch.setattr(health, "DEFAULT_HEALTH_FILE", tmp_path / "h_sort.json")
+    orig_web = web.WEB
+    web.WEB = {
+        "ddgs": lambda q, n: [{"title": "ddgs 1", "url": "http://d1.de", "source": "ddgs"}],
+        "bing": lambda q, n: [{"title": "Bing 1", "url": "http://b1.de", "source": "Bing"}],
+    }
+    try:
+        res = web.search_web("test", 3, timeout=5)
+    finally:
+        web.WEB = orig_web
+    assert res and res[0]["source"] == "ddgs", \
+        f"ddgs muss vorn sein, ist: {[r['source'] for r in res]}"

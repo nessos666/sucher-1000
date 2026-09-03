@@ -254,6 +254,24 @@ WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
        "wikipedia": q_wikipedia_web, "tavily": q_tavily, "exa": q_exa,
        "serpapi": q_serpapi}
 
+# P6-B3: Web-Quellen-Gewichte (für deterministische Sortierung — nicht
+# completion-order der Threads). Bing hinten: Junk-Problem (Juli-Audit ⭐⭐).
+_WEB_WEIGHT = {"ddgs": 1.0, "mojeek": 1.0, "wikipedia": 0.9, "tavily": 0.8,
+               "exa": 0.8, "serpapi": 0.9, "bing": 0.4}
+
+
+def _web_score_sort(results):
+    """Web-Ergebnisse DETERMINISTISCH sortieren (P6-B3/F7-Muster).
+
+    Vorher: completion-order der parallelen Threads (nondeterministisch!).
+    Jetzt: Quellen-Gewicht + Titel als stabilem letzten Schlüssel.
+    """
+    def score(r):
+        src = _WEB_WEIGHT.get((r.get("source") or "").lower(), 0.6)
+        return src
+    return sorted(results, key=lambda r: (score(r), (r.get("title") or "")[:80]),
+                  reverse=True)
+
 def search_web(query, n=8, only=None, timeout=30):
     """Alle Web-Quellen PARALLEL durchsuchen, aus allen sammeln.
 
@@ -357,7 +375,8 @@ def search_web(query, n=8, only=None, timeout=30):
             _reg.save()
         except Exception:
             pass
-    return results
+    # P6-B3: deterministisch sortieren (Gewicht + Titel) statt completion-order
+    return _web_score_sort(results)
 
 def list_web():
     for name, fn in WEB.items():
