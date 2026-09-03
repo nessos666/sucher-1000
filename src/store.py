@@ -26,7 +26,8 @@ import time
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1]
-DEFAULT_DB = BASE / "data" / "sucher.db"
+# Env-Override für Tests/Portabilität: SUCHER_DB=/pfad/zur.db
+DEFAULT_DB = Path(os.environ.get("SUCHER_DB", str(BASE / "data" / "sucher.db")))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ergebnisse (

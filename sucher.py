@@ -29,8 +29,8 @@ def log(msg, level="INFO"):
 def ensure_src_imports():
     """Importiert die Module aus src/ (nach dem Umzug)."""
     try:
-        import sucher_universal, sucher_oa, sucher_download, sucher_web
-        return sucher_universal, sucher_oa, sucher_download, sucher_web
+        import sucher_universal, sucher_oa, sucher_download, sucher_web, store
+        return sucher_universal, sucher_oa, sucher_download, sucher_web, store
     except ImportError as e:
         log(f"Import-Fehler: {e}", "ERROR"); raise
 
@@ -65,7 +65,7 @@ def main():
     if not args.query:
         print(__doc__); return
 
-    su, soa, sdl, sw = ensure_src_imports()
+    su, soa, sdl, sw, st = ensure_src_imports()
     os.makedirs(args.out, exist_ok=True)
 
     t0 = time.time()
@@ -103,6 +103,23 @@ def main():
         json.dump(results, f, ensure_ascii=False, indent=2)
     log(f"Ergebnis gespeichert: {fn} ({len(results)} Treffer)")
     print(f"\n  💾 Ergebnis: {fn}")
+
+    # 4) P5: SQLite-Archiv — jede Suche + Health in data/sucher.db
+    try:
+        store_inst = st.Store()
+        store_inst.save_ergebnisse(args.query, results)
+        try:
+            import health as _health_mod
+            reg = _health_mod.HealthRegistry()
+            store_inst.save_health(reg._data)
+        except Exception:
+            pass  # Health optional — DB-Hauptzweck ist das Ergebnis-Archiv
+        db_stat = f" (DB: {store_inst.anzahl_ergebnisse()} archiviert)"
+        print(f"  🗄  SQLite-Archiv: data/sucher.db{db_stat}")
+    except Exception as e:
+        log(f"SQLite-Archiv fehlgeschlagen: {e}", "WARN")
+        print("  ⚠ SQLite-Archiv fehlgeschlagen (JSON bleibt erhalten)")
+
     print(f"  ⏱ {time.time()-t0:.1f}s\n")
     print("  Tipp: --download lädt frei ladbare automatisch in --out.")
 
