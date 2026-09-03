@@ -92,10 +92,10 @@ def block_indicator(body, erwartet="json"):
     # HTML. Feeds echoen die Query im Titel (Suche "captcha" → Feed-Titel
     # enthält "captcha") und würden sonst fälschlich als Block killen →
     # stille 0 Treffer + Fehl-Health-Fails. Struktur-Erkennung VOR Marker.
-    if erwartet == "text" and probe_text.lstrip()[:60].lower().startswith(
-            ("<?xml", "<rss", "<feed", "<rdf")):
-        if "<item" in probe_text or "<entry" in probe_text:
-            return None  # parsebarer Feed — kein Block
+    if (erwartet == "text" and probe_text.lstrip()[:60].lower().startswith(
+            ("<?xml", "<rss", "<feed", "<rdf"))
+            and ("<item" in probe_text or "<entry" in probe_text)):
+        return None  # parsebarer Feed — kein Block
     m = _BLOCK_MARKER.search(probe)
     if m:
         return f"BLOCK: '{m.group(0)}'"
