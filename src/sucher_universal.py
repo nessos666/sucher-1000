@@ -259,13 +259,18 @@ def q_wikidata(query, n=6):
             "snippet": e.get("description","")})
     return out
 
-def q_lokal(query, n=10):
+def q_lokal(query, n=10, zeitlimit_s=3):
     """LOKAL-SUCHE: durchsucht Davids HAUPTLAGER-Wissensbasis (Dateinamen + Inhalt).
-    Findet, was DAVID schon hat — vermeidet Doppelrecherche."""
+    Findet, was DAVID schon hat — vermeidet Doppelrecherche.
+    P3: hartes Zeitlimit (default 3s) — os.walk über 133GB darf die Suche nie blockieren."""
+    import time as _time
     base = "~//HAUPTLAGER"
     kw = [w.lower() for w in query.split() if len(w)>3]
     hits=[]
+    t_start = _time.monotonic()
     for root,dirs,files in os.walk(base):
+        if _time.monotonic() - t_start > zeitlimit_s:
+            break  # Zeitlimit erreicht — Teilergebnis liefern
         # Tiefe begrenzen + Systemordner auslassen
         if root.count(os.sep)-base.count(os.sep) > 5: dirs[:]=[]
         if any(x in root for x in (".git","node_modules","07_SYSTEM","20_FROZEN")):
@@ -296,7 +301,18 @@ def resolve_sources(mode):
     if mode == "alle":      return {**SCI, **GENERAL}
     return dict(SCI)  # default
 
-def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False, sort_by="relevance", expand=True):
+def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False, sort_by="relevance", expand=True, budget_s=30):
+    """Suche über alle aktiven Quellen — PARALLEL mit hartem Gesamtbudget (P3).
+
+    - Quellen laufen gleichzeitig (ThreadPool), Gesamtzeit = langsamste Quelle,
+      nicht die Summe (vorher: bis 5 Min bei 12×25s sequenziell!)
+    - Budget hart: nach budget_s Sekunden wird abgebrochen, Teilergebnisse bleiben
+    - Dedup + Scoring NACH dem Fanout → deterministische Reihenfolge
+    - Jede Quelle läuft in eigenem Thread; Fehler werden geloggt (P1), nie still
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import time as _time
+
     active = resolve_sources(mode)
     if only:
         if only in active:
@@ -307,28 +323,54 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
             return []
     # --- Query-Expansion: engli/DE + Basis ---
     queries = _expand_query(query) if expand else [query]
+
+    # --- Parallel-Fanout: Aufgaben = (Quelle × Query-Variante) ---
     seen, results = set(), []
-    for qy in queries:
-        for name, fn in active.items():
-            try:
-                for it in fn(qy, n):
-                    key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
-                    if key and key not in seen:
-                        seen.add(key); results.append(it)
-            except Exception as e:
-                _log_quellenfehler(name, e)
+    budget_ueberschritten = False
+    t_start = _time.monotonic()
+    tasks = [(name, fn, qy) for qy in queries for name, fn in active.items()]
+    if not tasks:
+        return []
+    ex = ThreadPoolExecutor(max_workers=min(8, len(tasks)))
+    futs = {ex.submit(_run_quelle, name, fn, qy, n): (name, qy) for name, fn, qy in tasks}
+    try:
+        try:
+            for fut in as_completed(futs, timeout=budget_s):
+                name = futs[fut][0]
+                try:
+                    for it in fut.result():
+                        key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
+                        if key and key not in seen:
+                            seen.add(key); results.append(it)
+                except Exception as e:
+                    _log_quellenfehler(name, e)
+        except Exception:
+            # Budget abgelaufen: nicht startende Futures canceln, laufende NICHT
+            # abwarten (sonst blockiert der Kontextmanager bis Quelle endet!)
+            budget_ueberschritten = True
+    finally:
+        # wait=False: search() kehrt sofort zurück, hängende Threads blockieren nicht.
+        # Echte Quellen enden ohnehin nach net.py's 8s-Timeout von selbst.
+        ex.shutdown(wait=False, cancel_futures=True)
     # --- Filter: min_year ---
     if min_year:
         results = [r for r in results if _ok_year(r.get("year"), min_year)]
     # --- Filter: nur Open Access ---
     if oa_only:
         results = [r for r in results if r.get("is_oa") or r.get("pdf")]
-    # --- Cross-Quellen-Scoring (relevanteste zuerst) ---
+    # --- Cross-Quellen-Scoring (relevanteste zuerst) — NACH Fanout, deterministisch ---
     if sort_by != "jahr":
         results = _score_sort(results)
     else:
         results.sort(key=lambda r: (_to_int(r.get("year")) or 0) if r.get("year") else 0, reverse=True)
+    if budget_ueberschritten:
+        print(f"  ⚠ Gesamtbudget ({budget_s}s) überschritten — Teilergebnis ({len(results)} Treffer)", file=sys.stderr)
     return results
+
+
+def _run_quelle(name, fn, qy, n):
+    """Eine Quelle für eine Query-Variante ausführen (im Thread-Pool)."""
+    return list(fn(qy, n))
 
 def _expand_query(query):
     """Query-Expansion: basis + deutsche/englische Varianten + Kernbegriffe."""
