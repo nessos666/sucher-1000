@@ -22,7 +22,7 @@ Regeln:
 - Eine Quelle tot → andere liefern weiter + Fehler wird geloggt
 - Komplett Hermes-unabhängig: nur stdlib + ddgs/requests
 """
-import os, re, sys, json, time, threading
+import os, re, sys, json, time, threading, urllib.parse
 
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
 
@@ -84,74 +84,84 @@ def q_bing_html(query, n=8):
     """Bing-Suche über das RSS-Format — liefert echte Ziel-URLs ohne /ck/a-Redirects.
 
     Getestet 03.09.2026: ?format=rss → <item> mit <link>=echte URL.
+    F4 (OpenCode-Gesamt): läuft über net.get_text → 8s-Cap + Block-Erkennung.
     """
-    import urllib.request, urllib.parse
-    out = []
+    import urllib.parse
     try:
-        url = "https://www.bing.com/search?" + urllib.parse.urlencode(
-            {"q": query, "format": "rss"})
-        req = urllib.request.Request(url, headers=UA)
-        xml = urllib.request.urlopen(req, timeout=15).read().decode("utf-8", "ignore")
-        for item in re.findall(r"<item>.*?</item>", xml, re.S):
-            t = re.search(r"<title>(.*?)</title>", item, re.S)
-            l = re.search(r"<link>(.*?)</link>", item, re.S)
-            d = re.search(r"<description>(.*?)</description>", item, re.S)
-            if not t or not l: continue
-            title = t.group(1).strip()
-            link = l.group(1).strip()
-            if not title or not link.startswith("http"): continue
-            out.append({"title": title, "year": None, "venue": "Web",
-                "is_oa": True, "pdf": None, "doi": None,
-                "source": "Bing", "url": link,
-                "snippet": re.sub(r"<[^>]+>", "", d.group(1))[:200] if d else ""})
-            if len(out) >= n: break
-    except Exception as e:
-        _log_web_error("Bing", e)
+        import net
+    except ImportError:
+        _log_web_error("bing", "net fehlt")
+        return []
+    out = []
+    url = "https://www.bing.com/search?" + urllib.parse.urlencode(
+        {"q": query, "format": "rss"})
+    xml, err = net.get_text(url, timeout=12)
+    if err:
+        _log_web_error("bing", f"Block/Fehler: {err}")
+        return []
+    for item in re.findall(r"<item>.*?</item>", xml, re.S):
+        t = re.search(r"<title>(.*?)</title>", item, re.S)
+        l = re.search(r"<link>(.*?)</link>", item, re.S)
+        d = re.search(r"<description>(.*?)</description>", item, re.S)
+        if not t or not l: continue
+        title = t.group(1).strip()
+        link = l.group(1).strip()
+        if not title or not link.startswith("http"): continue
+        out.append({"title": title, "year": None, "venue": "Web",
+            "is_oa": True, "pdf": None, "doi": None,
+            "source": "Bing", "url": link,
+            "snippet": re.sub(r"<[^>]+>", "", d.group(1))[:200] if d else ""})
+        if len(out) >= n: break
     return out
 
 # ---------- Quelle 3: Tavily (Key optional) ----------
 def q_tavily(query, n=8):
     key = _env("TAVILY_API_KEY")
     if not key:
-        print("  ⚠ [Tavily] übersprungen (kein TAVILY_API_KEY in Env)", file=sys.stderr)
+        print("  ⚠ [tavily] übersprungen (kein TAVILY_API_KEY in Env)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("tavily", "net fehlt")
         return []
     out = []
-    try:
-        import urllib.request, json as _json
-        body = _json.dumps({"api_key": key, "query": query,
-            "max_results": n, "search_depth": "basic"}).encode()
-        req = urllib.request.Request("https://api.tavily.com/search",
-            data=body, headers={"Content-Type": "application/json"})
-        j = _json.loads(urllib.request.urlopen(req, timeout=20).read())
-        for r in j.get("results", []):
-            out.append({"title": r.get("title", ""), "year": None, "venue": "Web",
-                "is_oa": True, "pdf": None, "doi": None,
-                "source": "Tavily", "url": r.get("url"),
-                "snippet": (r.get("content") or "")[:250]})
-    except Exception as e:
-        _log_web_error("Tavily", e)
+    j = net.post_json("https://api.tavily.com/search",
+                      {"api_key": key, "query": query, "max_results": n,
+                       "search_depth": "basic"}, timeout=12)
+    if "_error" in j:
+        _log_web_error("tavily", j["_error"])
+        return []
+    for r in j.get("results", []):
+        out.append({"title": r.get("title", ""), "year": None, "venue": "Web",
+            "is_oa": True, "pdf": None, "doi": None,
+            "source": "Tavily", "url": r.get("url"),
+            "snippet": (r.get("content") or "")[:250]})
     return out
 
 # ---------- Quelle 4: SerpApi (Google-Rankings, Key optional) ----------
 def q_serpapi(query, n=8):
     key = _env("SERPAPI_API_KEY") or _env("SERPER_API_KEY")
     if not key:
-        print("  ⚠ [SerpApi] übersprungen (kein SERPAPI_API_KEY in Env)", file=sys.stderr)
+        print("  ⚠ [serpapi] übersprungen (kein SERPAPI_API_KEY in Env)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("serpapi", "net fehlt")
         return []
     out = []
-    try:
-        import urllib.request, urllib.parse, json as _json
-        url = "https://serpapi.com/search.json?" + urllib.parse.urlencode(
-            {"q": query, "api_key": key, "num": n})
-        req = urllib.request.Request(url, headers=UA)
-        j = _json.loads(urllib.request.urlopen(req, timeout=20).read())
-        for r in j.get("organic_results", [])[:n]:
-            out.append({"title": r.get("title", ""), "year": None, "venue": "Web",
-                "is_oa": True, "pdf": None, "doi": None,
-                "source": "Google", "url": r.get("link"),
-                "snippet": (r.get("snippet") or "")[:200]})
-    except Exception as e:
-        _log_web_error("SerpApi", e)
+    url = "https://serpapi.com/search.json?" + urllib.parse.urlencode(
+        {"q": query, "api_key": key, "num": n})
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("serpapi", j["_error"])
+        return []
+    for r in j.get("organic_results", [])[:n]:
+        out.append({"title": r.get("title", ""), "year": None, "venue": "Web",
+            "is_oa": True, "pdf": None, "doi": None,
+            "source": "Google", "url": r.get("link"),
+            "snippet": (r.get("snippet") or "")[:200]})
     return out
 
 # ---------- Quelle 5: Mojeek (key-frei, Captcha-sicher über net.get_text) ----------
@@ -166,13 +176,13 @@ def q_mojeek(query, n=8):
     try:
         import net
     except ImportError:
-        _log_web_error("Mojeek", "net fehlt")
+        _log_web_error("mojeek", "net fehlt")
         return []
     out = []
     url = "https://www.mojeek.com/search?" + urllib.parse.urlencode({"q": query})
     text, err = net.get_text(url, timeout=12)
     if err:
-        _log_web_error("Mojeek", f"Block/Fehler: {err}")
+        _log_web_error("mojeek", f"Block/Fehler: {err}")
         return []
     # Ergebnis-Block: <h2><a class="ob" href="URL">Titel</a></h2> + <p class="s">Snippet</p>
     for m in re.finditer(r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', text, re.S):
@@ -196,27 +206,33 @@ def q_mojeek(query, n=8):
 
 # ---------- Quelle 6: Wikipedia DE+EN (key-frei, zuverlässig) ----------
 def q_wikipedia_web(query, n=8):
-    """Wikipedia-Suche über die offene MediaWiki-API — Deutsch + Englisch parallel."""
-    import urllib.request, urllib.parse
+    """Wikipedia-Suche über die offene MediaWiki-API — Deutsch + Englisch parallel.
+
+    F4 (OpenCode-Gesamt): läuft über net.get_json → 8s-Cap + Retry.
+    """
+    try:
+        import net
+    except ImportError:
+        _log_web_error("wikipedia", "net fehlt")
+        return []
     out = []
     for lang in ("de", "en"):
-        try:
-            url = f"https://{lang}.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
-                "action": "query", "list": "search", "srsearch": query,
-                "format": "json", "srlimit": min(n, 10)})
-            req = urllib.request.Request(url, headers=UA)
-            j = json.loads(urllib.request.urlopen(req, timeout=12).read())
-            for r in j.get("query", {}).get("search", [])[:n]:
-                t = r.get("title", "")
-                if not t:
-                    continue
-                page_url = f"https://{lang}.wikipedia.org/wiki/" + urllib.parse.quote(t.replace(" ", "_"))
-                out.append({"title": t, "year": None, "venue": "Wikipedia",
-                            "is_oa": True, "pdf": None, "doi": None,
-                            "source": "Wikipedia", "url": page_url,
-                            "snippet": re.sub(r"<[^>]+>", "", r.get("snippet", ""))[:200]})
-        except Exception as e:
-            _log_web_error(f"Wikipedia-{lang}", e)
+        url = f"https://{lang}.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
+            "action": "query", "list": "search", "srsearch": query,
+            "format": "json", "srlimit": min(n, 10)})
+        j = net.get_json(url, timeout=12)
+        if "_error" in j:
+            _log_web_error("wikipedia", f"{lang}: {j['_error']}")
+            continue
+        for r in j.get("query", {}).get("search", [])[:n]:
+            t = r.get("title", "")
+            if not t:
+                continue
+            page_url = f"https://{lang}.wikipedia.org/wiki/" + urllib.parse.quote(t.replace(" ", "_"))
+            out.append({"title": t, "year": None, "venue": "Wikipedia",
+                        "is_oa": True, "pdf": None, "doi": None,
+                        "source": "Wikipedia", "url": page_url,
+                        "snippet": re.sub(r"<[^>]+>", "", r.get("snippet", ""))[:200]})
     return out[:n]
 
 
@@ -225,23 +241,24 @@ def q_exa(query, n=8):
     """Exa-Suche (semantische Websuche). Key optional: EXA_API_KEY in Env."""
     key = _env("EXA_API_KEY")
     if not key:
-        print("  ⚠ [Exa] übersprungen (kein EXA_API_KEY in Env)", file=sys.stderr)
+        print("  ⚠ [exa] übersprungen (kein EXA_API_KEY in Env)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("exa", "net fehlt")
         return []
     out = []
-    try:
-        import urllib.request, json as _json
-        body = _json.dumps({"query": query, "numResults": n}).encode()
-        req = urllib.request.Request("https://api.exa.ai/search",
-            data=body, headers={"Content-Type": "application/json",
-                                "x-api-key": key})
-        j = _json.loads(urllib.request.urlopen(req, timeout=20).read())
-        for r in j.get("results", []):
-            out.append({"title": r.get("title", ""), "year": None, "venue": "Web",
-                        "is_oa": True, "pdf": None, "doi": None,
-                        "source": "Exa", "url": r.get("url"),
-                        "snippet": (r.get("text") or "")[:250]})
-    except Exception as e:
-        _log_web_error("Exa", e)
+    j = net.post_json("https://api.exa.ai/search", {"query": query, "numResults": n},
+                      timeout=12, headers={"x-api-key": key})
+    if "_error" in j:
+        _log_web_error("exa", j["_error"])
+        return []
+    for r in j.get("results", []):
+        out.append({"title": r.get("title", ""), "year": None, "venue": "Web",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "Exa", "url": r.get("url"),
+                    "snippet": (r.get("text") or "")[:250]})
     return out
 
 
@@ -364,8 +381,26 @@ def search_web(query, n=8, only=None, timeout=30):
         try:
             with _WEB_FEHLER_LOCK:
                 fehler_register = dict(_WEB_FEHLER)
+
+            def _alias_fehler(name):
+                """Fehler-Eintrag zu einem Register-Key finden (F1-Fix).
+
+                q_*-Funktionen können unter leicht abweichendem Label loggen
+                ('Mojeek' vs. Key 'mojeek', 'Wikipedia-de' vs. 'wikipedia').
+                Normalisierung: exakt, dann lower, dann Präfix.
+                """
+                if name in fehler_register:
+                    return fehler_register[name]
+                low = name.lower()
+                if low in fehler_register:
+                    return fehler_register[low]
+                for label, info in fehler_register.items():
+                    if label.lower().startswith(low) or low.startswith(label.lower()):
+                        return info
+                return None
+
             for name in list(active.keys()):
-                fehlerinfo = fehler_register.get(name)
+                fehlerinfo = _alias_fehler(name)
                 hat_fehler = fehlerinfo is not None and fehlerinfo[1] > 0
                 fehlertext = fehlerinfo[0] if fehlerinfo else ""
                 if hat_fehler and name not in quellen_mit_treffern:

@@ -56,7 +56,7 @@ def main():
 
     if args.sources:
         src_list = os.path.join(SRC, "sucher_universal.py")
-        subprocess.run(["python3", src_list, "--list"])
+        subprocess.run([sys.executable, src_list, "--list"])  # F9: venv statt System-python3
         print("\n  WEB-BÜNDEL (Multi-Engine, --modus web):")
         subprocess.run([sys.executable, "-c",
             "import sys; sys.path.insert(0, '" + SRC + "'); import sucher_web; sucher_web.list_web()"])
@@ -73,7 +73,26 @@ def main():
 
     # 1) SUCHE
     log(f"Suche start: {args.query} (modus={args.modus})")
-    if args.modus == "web":
+    if args.modus == "alle":
+        # F3 (OpenCode-Gesamt): 'alle' = Studien + Web-Bündel parallel (Kombi)
+        import threading
+        ergebnisse = {}
+        def _studien():
+            ergebnisse["studien"] = su.search(args.query, args.n, mode="universal")
+        def _web():
+            ergebnisse["web"] = sw.search_web(args.query, args.n)
+        t1 = threading.Thread(target=_studien, daemon=True); t1.start()
+        t2 = threading.Thread(target=_web, daemon=True); t2.start()
+        t1.join(timeout=35); t2.join(timeout=35)
+        results = ergebnisse.get("studien", []) + ergebnisse.get("web", [])
+        # Dedup über URL
+        seen, dedup = set(), []
+        for r in results:
+            url = (r.get("url") or "").lower()
+            if url and url not in seen:
+                seen.add(url); dedup.append(r)
+        results = dedup
+    elif args.modus == "web":
         # Web-Bündel: mehrere Web-Such-Quellen parallel (sucher_web)
         results = sw.search_web(args.query, args.n)
     else:

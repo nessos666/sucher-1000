@@ -72,17 +72,37 @@ def test_f2_get_text_proxy_erwartet_text(fake_transport, monkeypatch):
     assert "Echte Seite via Proxy" in text
 
 
-# F3: q_base nutzt net.get_json (kein direkter urllib-Bypass)
+# F3: Alle AKTIVEN Quellen nutzen die zentrale Netz-Schicht (kein urlopen-Bypass)
 
-def test_f3_q_base_nutzt_net(monkeypatch):
-    """q_base darf nicht direkt urllib nutzen, sondern muss über net gehen."""
+def test_f3_aktive_quellen_ohne_urlopen_bypass():
+    """Registrierte q_*-Funktionen dürfen kein direktes urlopen mit 30s nutzen.
+
+    F2 (OpenCode-Gesamt): q_base/q_biorxiv waren tote Quellen (nie registriert,
+    BASE=Botwall, bioRxiv=keine Freiwort-Suche) und täuschten Abdeckung vor.
+    Dieser Test prüft die WIRKLICH aktiven Quellen (SCI ∪ GENERAL) auf echte
+    urllib-Aufrufe im Funktionscode (Docstring-Erwähnungen zählen nicht).
+    """
+    import ast
     import inspect
-    src = inspect.getsource(su.q_base)
-    # Nach dem P1-Fix sollte q_base http_json() (→net) nutzen, KEIN urlopen mit 30s
-    assert "http_json(" in src or "net.get_json" in src, \
-        "q_base muss die zentrale Transport-Schicht nutzen"
-    assert "timeout=30" not in src.replace("net.get_json(url, timeout=", ""), \
-        "Kein 30s-Direkt-Timeout in q_base"
+    alle = dict(su.SCI)
+    alle.update(su.GENERAL)
+    for name, fn in alle.items():
+        tree = ast.parse(inspect.getsource(fn))
+        for node in ast.walk(tree):
+            # Nur echte Call-Ausdrücke: urllib.request.urlopen(...) 
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr == "urlopen":
+                    # timeout-Argument prüfen (nur wenn 30 gesetzt → Bypass)
+                    for kw in node.keywords:
+                        if kw.arg == "timeout" and isinstance(kw.value, ast.Constant):
+                            val = kw.value.value
+                            if isinstance(val, (int, float)) and val >= 20:
+                                pytest.fail(f"{name}: urlopen mit {val}s — "
+                                            "net.py-Schicht nutzen (8s-Cap)!")
+
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
+               and node.func.id == "urlopen":
+                pytest.fail(f"{name}: nackter urlopen()-Aufruf — net.py nutzen!")
 
 
 # F4: health_check --json gibt NUR JSON aus

@@ -42,7 +42,8 @@ def test_mojeek_captcha_erkannt(mojeek_route, capsys):
     out = web.q_mojeek("test", 5)
     assert out == [], "Captcha darf keine 'Ergebnisse' liefern"
     err = capsys.readouterr().err
-    assert "Mojeek" in err and "Block" in err, f"Fehler muss sichtbar sein: {err}"
+    assert "mojeek" in err.lower() and "block" in err.lower(), \
+        f"Fehler muss sichtbar sein: {err}"
 
 
 def test_mojeek_parst_echte_ergebnisse(mojeek_route):
@@ -141,6 +142,50 @@ def test_web_fehler_degradiert_health(tmp_path, monkeypatch, capsys):
         f"Web-Fehler darf nicht HEALTHY machen, ist: {st['state']}"
     assert reg.status("okweb")["state"] == health.HEALTHY, \
         "Gesunde Web-Quelle muss HEALTHY werden"
+
+
+def test_health_label_mismatch_regression(tmp_path, monkeypatch, capsys):
+    """F1 (OpenCode): Quelle loggt unter ANDEREM Label als Register-Key → trotzdem DEGRADED.
+
+    Vorher: q_mojeek loggte als 'Mojeek', Register-Key ist 'mojeek' → Fehler
+    wurden nie gefunden → HEALTHY trotz Captcha-Block (Produktions-Beleg).
+    Fix: Commit-Schleife normalisiert Labels (lower + Präfix-Match).
+    """
+    import health
+    monkeypatch.setattr(health, "DEFAULT_HEALTH_FILE", tmp_path / "h_alias.json")
+
+    # Simuliert Label-Abweichung: "Mojeek" statt Key "mojeek" (alter Bug)
+    def echte_mojeek_semantik(q, n):
+        web._log_web_error("Mojeek", "BLOCK: captcha")
+        return []
+
+    def ok_quelle(q, n):
+        return [{"title": "Ok", "url": "http://ok.de", "source": "okweb_alias"}]
+
+    orig_web = web.WEB
+    web.WEB = {"mojeek": echte_mojeek_semantik, "okweb_alias": ok_quelle}
+    try:
+        for _ in range(3):
+            web.search_web("test", 3, timeout=5)  # 3 Fails
+    finally:
+        web.WEB = orig_web
+
+    reg = health.HealthRegistry()
+    st = reg.status("mojeek")
+    assert st["state"] == health.BROKEN, \
+        f"Label 'Mojeek' muss auf Key 'mojeek' degradieren, ist: {st['state']} (consec={st.get('consecutive_fails',0)})"
+
+
+def test_f1_aliase_normalisiert_alle_quellen():
+    """Alle _log_web_error-Labels müssen den WEB-Register-Keys entsprechen (F1-Fix)."""
+    import inspect, re
+    src = inspect.getsource(web)
+    # Alle _log_web_error("<label>", ...)-Aufrufe extrahieren
+    labels = set(re.findall(r'_log_web_error\("([^"]+)"', src))
+    register = set(web.WEB.keys())
+    # Jedes Label muss entweder ein Register-Key sein ODER ein Key-Präfix enthalten
+    fremd = [l for l in labels if l not in register and not any(l.startswith(k) for k in register)]
+    assert not fremd, f"Fehler-Labels ohne passenden Register-Key: {fremd} (Register: {register})"
 
 
 def test_web_broken_wird_uebersprungen(tmp_path, monkeypatch, capsys):

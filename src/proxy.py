@@ -81,3 +81,34 @@ def fetch(url: str, timeout: int = 8, erwartet: str = "json"):
         return body.decode("utf-8", "ignore")
     except Exception:
         return None
+
+
+def fetch_post(url: str, payload: dict, timeout: int = 8, erwartet: str = "json",
+               headers=None):
+    """1× POST über Proxy. Rückgabe: JSON ODER None (Proxy scheiterte).
+
+    F4 (OpenCode-Gesamt): POST-fähiger Proxy-Pfad für Tavily/Exa.
+    """
+    if not available():
+        return None
+    try:
+        handler = urllib.request.ProxyHandler({
+            "http": proxy_url(),
+            "https": proxy_url(),
+        })
+        opener = urllib.request.build_opener(handler)
+        hdr = dict(UA)
+        hdr["Content-Type"] = "application/json"
+        if headers:
+            hdr.update(headers)
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=hdr)
+        with opener.open(req, timeout=timeout) as r:
+            body = r.read()
+        if erwartet == "json":
+            probe = body[:2000].decode("utf-8", "ignore").lstrip()
+            if not probe.startswith(("{", "[")):
+                return None
+            return json.loads(body.decode("utf-8", "replace"))
+        return body.decode("utf-8", "ignore")
+    except Exception:
+        return None

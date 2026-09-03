@@ -152,6 +152,67 @@ def get_json(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
     return {"_error": last or "timeout"}
 
 
+def post_json(url, payload: dict, timeout=TIMEOUT_S, retries=RETRIES,
+              headers=None, proxy_retry=True):
+    """POST-JSON mit gleicher Härtung wie get_json (F4/OpenCode-Gesamt).
+
+    Für Tavily/Exa (POST-APIs) — 8s-Cap, Retry, Block-Erkennung, Proxy-Fallback.
+    Rückgabe: dict/list ODER {"_error": ...}  (dict | list)
+    """
+    last = None
+    data = json.dumps(payload).encode()
+    for i in range(retries + 1):
+        try:
+            hdr = dict(UA)
+            hdr["Content-Type"] = "application/json"
+            if headers:
+                hdr.update(headers)
+            req = urllib.request.Request(url, data=data, headers=hdr)
+            if _transport is not None:
+                resp = _transport.open(url, timeout=timeout)
+                body = _decode_body(resp)
+            else:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    body = r.read()
+            grund = block_indicator(body, erwartet="json")
+            if grund:
+                last = grund
+                if proxy_retry and i == 0:
+                    proxied = _try_proxy_post(url, payload, timeout, headers)
+                    if proxied is not None:
+                        return proxied
+                continue
+            parsed = json.loads(body.decode("utf-8", "replace"))
+            if not isinstance(parsed, (dict, list)):
+                return {"_error": f"FORMAT: JSON-Skalar ({type(parsed).__name__})"}
+            return parsed
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and i < retries:
+                time.sleep(BACKOFF_429_S)
+                continue
+            last = f"HTTP {e.code}"
+            if proxy_retry and i == 0 and e.code in (403, 429):
+                proxied = _try_proxy_post(url, payload, timeout, headers)
+                if proxied is not None:
+                    return proxied
+        except Exception as e:
+            last = str(e)[:80]
+            if i < retries:
+                time.sleep(0.5)
+                continue
+    return {"_error": last or "timeout"}
+
+
+def _try_proxy_post(url, payload, timeout, headers=None):
+    """POST über Proxy — 1× Versuch, None wenn kein Proxy."""
+    try:
+        import proxy
+        return proxy.fetch_post(url, payload, timeout=timeout,
+                                erwartet="json", headers=headers)
+    except Exception:
+        return None
+
+
 def get_text(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
     """HTML/Text laden mit Block-Erkennung. Rückgabe: (text, error_or_None)."""
     last = None

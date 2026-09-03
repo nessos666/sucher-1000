@@ -194,27 +194,7 @@ def q_arxiv(query, n=6):
             "snippet": re.sub(r"\s+"," ",summ.group(1))[:150] if summ else ""})
     return out
 
-def q_biorxiv(query, n=6):
-    """bioRxiv/medRxiv-API: biomedizinische Preprints."""
-    # bioRxiv Such-API
-    url = f"https://api.biorxiv.org/details/biorxiv/0_.{int(time.time())}_{n}"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent":"Sucher1000/ (mailto:kontakt@sucher1000.example)"})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            j = json.load(r)
-    except Exception as e:
-        _log_quellenfehler("biorxiv", e)
-        return []
-    out=[]
-    for p in j.get("collection", [])[:n]:
-        out.append({
-            "title": p.get("title",""), "year": (p.get("date") or "")[:4] or None,
-            "venue":"bioRxiv", "is_oa":True, "pdf":None, "doi":p.get("doi"),
-            "source":"bioRxiv", "url":f"https://doi.org/{p.get('doi')}",
-            "snippet": f"{p.get('authors','')}"})
-    return out
-
-# ---------- Neu: PubMed / BASE / Wikidata / Lokal ----------
+# ---------- Neu: PubMed / Wikidata / Lokal ----------
 def q_pubmed(query, n=6):
     """PubMed (NCBI eutils): biomedizinische Forschung mit PMID/PMCID."""
     url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" + urllib.parse.urlencode(
@@ -227,6 +207,7 @@ def q_pubmed(query, n=6):
     u2 = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?" + urllib.parse.urlencode(
         {"db":"pubmed","id":",".join(ids),"retmode":"json"})
     j2 = http_json(u2)
+    if _check_fehler("pubmed", j2): return []  # F10: auch 2. Request loggen
     out=[]
     res = (j2.get("result") or {})
     for pid in ids:
@@ -240,30 +221,6 @@ def q_pubmed(query, n=6):
             "is_oa": False, "pdf": None, "doi": doi or None,
             "source":"PubMed", "url": f"https://pubmed.ncbi.nlm.nih.gov/{pid}/",
             "snippet": r.get("description","")[:120]})
-    return out
-
-def q_base(query, n=6):
-    """BASE (Bielefeld Academic Search Engine): große Open-Access-Suchmaschine.
-
-    F3 (Codex): nutzt die zentrale Transport-Härtung (http_json → net.get_json)
-    statt direktem urllib mit 30s-Timeout — 8s-Limit, Block-Erkennung, Retry,
-    Proxy-Fallback greifen jetzt auch hier.
-    """
-    url = "https://www.base-search.net/Search/Results?" + urllib.parse.urlencode(
-        {"lookfor":query,"format":"json","n":n})
-    j = http_json(url, timeout=8)
-    if "_error" in j:
-        _log_quellenfehler("base", j["_error"])
-        return []
-    out=[]
-    res = j.get("response") or {}
-    for d in (res.get("docs") or [])[:n]:
-        out.append({"title": d.get("title",[""])[0] if isinstance(d.get("title"),list) else d.get("title",""),
-            "year": d.get("year",[""])[0] if isinstance(d.get("year"),list) else d.get("year"),
-            "venue": d.get("dcType",[""])[0] if isinstance(d.get("dcType"),list) else "",
-            "is_oa": bool(d.get("oa")), "pdf": None, "doi": d.get("doi"),
-            "source":"BASE", "url": (d.get("link") or [""])[0] if isinstance(d.get("link"),list) else d.get("link"),
-            "snippet": (d.get("dcdescription",[""])[0] if isinstance(d.get("dcdescription"),list) else (d.get("dcdescription") or ""))[:120]})
     return out
 
 def q_wikidata(query, n=6):
