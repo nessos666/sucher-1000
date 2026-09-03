@@ -1,0 +1,88 @@
+{
+  "queries": [
+    {
+      "query": "emotional neglect mother adult children",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": ["pubmed.ncbi.nlm.nih.gov", "sciencedirect.com"],
+      "thema": "Davids Forschung: toxische Mutter"
+    },
+    {
+      "query": "narcissistic mother enmeshment recovery",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": ["pubmed.ncbi.nlm.nih.gov", "apa.org"],
+      "thema": "Davids Forschung: Narzissmus"
+    },
+    {
+      "query": "posttraumatic growth EMDR systematic review",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": ["pubmed.ncbi.nlm.nih.gov"],
+      "thema": "Davids Forschung: PTBS-Behandlung"
+    },
+    {
+      "query": "bentonite soil water retention agriculture",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": ["sciencedirect.com", "mdpi.com", "springer.com"],
+      "thema": "Bentonit 3D Wasserreservoir"
+    },
+    {
+      "query": "bentonite clay swelling permeability barrier",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": ["sciencedirect.com"],
+      "thema": "Bentonit-Technik"
+    },
+    {
+      "query": "large language model agents tool use survey",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": ["arxiv.org"],
+      "thema": "KI-Agenten (Davids Beruf)"
+    },
+    {
+      "query": "AI coding agent benchmark evaluation",
+      "modus": "alle",
+      "n": 5,
+      "erwartete_domains": ["arxiv.org", "github.com"],
+      "thema": "KI-Coding-Agenten"
+    },
+    {
+      "query": "PTBS Behandlung München Therapeut",
+      "modus": "web",
+      "n": 5,
+      "erwartete_domains": ["therapie.de", "ptsd-netz.de"],
+      "thema": "Lokale Suche"
+    },
+    {
+      "query": "Hausmeister Stelle Island Unterkunft",
+      "modus": "web",
+      "n": 5,
+      "erwartete_domains": ["island.is", "vinna.is"],
+      "thema": "Davids Island-Plan"
+    },
+    {
+      "query": "Ungarn Firma gruenden EU Steuern",
+      "modus": "web",
+      "n": 5,
+      "erwartete_domains": ["nav.gov.hu", "europa.eu"],
+      "thema": "Vermoegens-Plan Ungarn"
+    },
+    {
+      "query": "gold allocation Switzerland storage safe",
+      "modus": "web",
+      "n": 5,
+      "erwartete_domains": [],
+      "thema": "Vermoegens-Plan Gold (nur Treffer-Check)"
+    },
+    {
+      "query": "trauma-informed yoga research",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": ["pubmed.ncbi.nlm.nih.gov"],
+      "thema": "Therapie-Vergleich"
+    }
+  ]
+}

@@ -850,7 +850,7 @@ def _score_sort(results):
     """Cross-Quellen-Scoring: gewichtet nach Zitaten (cites), Relevanz, OA, Quelle."""
     # Quelle-Gewicht (Peer-reviewed stärker)
     q_weight = {"OpenAlex":1.0, "EuropePMC":1.0, "Crossref":0.8, "DOAJ":0.8,
-                "PubMed":0.9, "arXiv":0.5, "SemanticScholar":0.8,
+                "PubMed":0.9, "arXiv":0.85, "SemanticScholar":0.8,
                 "Zenodo":0.7, "DataCite":0.7, "DBLP":0.8, "OpenAIRE":0.7,
                 "ClinicalTrials":0.8, "OpenReview":0.8, "OSF":0.6, "CORE":0.8,
                 "DOAB":0.6,

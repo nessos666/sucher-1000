@@ -1,7 +1,8 @@
 __pycache__/
 *.pyc
 .venv/
-data/
+data/*
+!data/golden_queries.json
 logs/
 sucher_ergebnisse/
 ergebnisse/
@@ -10,3 +11,5 @@ ergebnisse/
 .coverage
 sucher_cache.db
 health.json
+
+# Golden-Query-Set MUSS versioniert werden (Qualitäts-Messbasis)
