@@ -153,7 +153,8 @@ def test_register_enthaelt_neue_quellen():
 def test_web_suche_kein_exit_hang(tmp_path):
     """search_web darf den Prozess nicht am Exit hindern (F1 auch für Web)."""
     REPO = Path(__file__).resolve().parents[1]
-    env = dict(os.environ, SUCHER_HEALTH_FILE=str(tmp_path / "h_hang.json"))
+    env = dict(os.environ, SUCHER_HEALTH_FILE=str(tmp_path / "h_hang.json"),
+               SUCHER_CACHE_DB=str(tmp_path / "c_hang.db"))
     code = """
 import sys; sys.path.insert(0, 'src')
 import sucher_web as w

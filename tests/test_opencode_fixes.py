@@ -36,7 +36,8 @@ su.GENERAL = {}
 res = su.search("test", 3, mode="studien", budget_s=2)
 print("SEARCH_DONE")
 '''
-    env = dict(os.environ, SUCHER_HEALTH_FILE=str(tmp_path / "h_f1.json"))
+    env = dict(os.environ, SUCHER_HEALTH_FILE=str(tmp_path / "h_f1.json"),
+               SUCHER_CACHE_DB=str(tmp_path / "c_f1.db"))
     t0 = time.monotonic()
     r = subprocess.run([sys.executable, "-c", code], capture_output=True,
                        text=True, timeout=10, cwd=str(REPO), env=env)

@@ -50,13 +50,18 @@ def _init(db_path):
         conn.close()
 
 
-def _key(quelle: str, query: str, n: int) -> str:
-    return f"{quelle}|{query.strip().lower()}|{n}"
+def _key(fanout: str, quelle: str, query: str, n: int) -> str:
+    return f"{fanout}|{quelle}|{query.strip().lower()}|{n}"
 
 
-def get(quelle: str, query: str, n: int = 8, ttl_s: int = DEFAULT_TTL_S,
-        db_path=None) -> list | None:
-    """Cache-Treffer zurückgeben ODER None (miss/abgelaufen)."""
+def get(fanout: str, quelle: str, query: str, n: int = 8,
+        ttl_s: int = DEFAULT_TTL_S, db_path=None) -> list | None:
+    """Cache-Treffer zurückgeben ODER None (miss/abgelaufen).
+
+    F2 (OpenCode-Shiraberu): fanout (\"studien\"/\"web\") im Key — \"wikipedia\"
+    existiert als verschiedene q-Funktion in beiden Fanouts; ohne Namespace
+    kollidieren ihre Payloads.
+    """
     try:
         db = Path(db_path) if db_path else DEFAULT_CACHE_DB
         if not db.exists():
@@ -66,7 +71,7 @@ def get(quelle: str, query: str, n: int = 8, ttl_s: int = DEFAULT_TTL_S,
             try:
                 row = conn.execute(
                     "SELECT payload, ts FROM cache WHERE key=?",
-                    (_key(quelle, query, n),)).fetchone()
+                    (_key(fanout, quelle, query, n),)).fetchone()
             finally:
                 conn.close()
         if not row:
@@ -79,15 +84,16 @@ def get(quelle: str, query: str, n: int = 8, ttl_s: int = DEFAULT_TTL_S,
         return None  # Cache-Fehler = kein Treffer, nie crashen
 
 
-def put(quelle: str, query: str, n: int, results: list, db_path=None) -> None:
+def put(fanout: str, quelle: str, query: str, n: int, results: list,
+        db_path=None) -> None:
     """Ergebnis in den Cache schreiben (max-entries trimmen)."""
     try:
         db = Path(db_path) if db_path else DEFAULT_CACHE_DB
         db.parent.mkdir(parents=True, exist_ok=True)
-        _init(db)
-        key = _key(quelle, query, n)
+        key = _key(fanout, quelle, query, n)
         payload = json.dumps(results, ensure_ascii=False)
         with _lock:
+            _init(db)  # F6: DDL im Lock — kein Erstzugriffs-Race zwischen Workern
             conn = _conn(db)
             try:
                 conn.execute("BEGIN IMMEDIATE")

@@ -365,9 +365,11 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
             # kommt aus dem Cache statt das Netz zu fragen
             try:
                 import cache as _cache
-                treffer = _cache.get(name, qy, n)
+                treffer = _cache.get("studien", name, qy, n)
                 if treffer is not None:
-                    ergebnis_q.put((name, "ok", treffer, False))
+                    # F1 (OpenCode-Shiraberu): Cache-Treffer = KEIN Health-Signal!
+                    # Status 'cached' → Main-Loop committet weder ok noch fail.
+                    ergebnis_q.put((name, "cached", treffer, False))
                     return
             except Exception:
                 pass
@@ -386,7 +388,7 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                 if payload and not hatte_fehler:
                     try:
                         import cache as _cache
-                        _cache.put(name, qy, n, payload)
+                        _cache.put("studien", name, qy, n, payload)
                     except Exception:
                         pass
                 ergebnis_q.put((name, "ok" if not hatte_fehler else "err_lokal",
@@ -408,10 +410,17 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
         try:
             name, status, payload, hatte_fehler = ergebnis_q.get(timeout=0.2)
             offen -= 1
-            quellen_abgeschlossen.add(name)
+            if status != "cached":
+                quellen_abgeschlossen.add(name)  # F1: Cache-Treffer ≠ abgeschlossen
             if status == "ok":
                 if payload:
                     quellen_mit_treffern.add(name)
+                for it in payload:
+                    key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
+                    if key and key not in seen:
+                        seen.add(key); results.append(it)
+            elif status == "cached":
+                # Cache-Treffer: in results aufnehmen, aber KEIN Health-Signal (F1)
                 for it in payload:
                     key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
                     if key and key not in seen:

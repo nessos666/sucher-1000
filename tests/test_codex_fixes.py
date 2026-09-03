@@ -119,7 +119,8 @@ def test_f4_health_json_clean(monkeypatch, capsys, tmp_path):
     # Direkter Test der Logik: --json-Zweig darf keine Prints mischen
     # (Wir testen das Verhalten über ein Sub-Skript, da health_check Netz braucht)
     import subprocess, sys as _sys
-    env = dict(os.environ, SUCHER_HEALTH_FILE=str(tmp_path / "h_live_test.json"))
+    env = dict(os.environ, SUCHER_HEALTH_FILE=str(tmp_path / "h_live_test.json"),
+               SUCHER_CACHE_DB=str(tmp_path / "c_live_test.db"))
     r = subprocess.run(
         [_sys.executable, "scripts/health_check.py", "--json", "--modus", "web"],
         capture_output=True, text=True, timeout=60, cwd=str(Path(__file__).resolve().parents[1]),

@@ -36,7 +36,8 @@ BACKOFF_429_S = 1.0    # kurz, nicht 5s
 _BLOCK_MARKER = re.compile(
     r"(captcha|unusual traffic|access denied|attention required|"
     r"just a moment|verify you are human|anubis|making sure you're not a bot|"
-    r"cf-chl|cf-browser-verification|enable javascript and cookies)",
+    r"cf-chl|cf-browser-verification|enable javascript and cookies|"
+    r"anomaly|select all squares|are you a robot)",
     re.IGNORECASE,
 )
 

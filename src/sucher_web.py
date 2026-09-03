@@ -87,6 +87,8 @@ def q_ddgs(query, n=8):
             return out
     except Exception:
         pass  # → HTML-Fallback
+    # F4 (OpenCode-Shiraberu): Teiltreffer der Lib nicht mit Fallback mischen
+    out = []
     # Weg 2: HTML o=json (Shiraberu: html.duckduckgo.com/html/?o=json)
     try:
         import net
@@ -386,19 +388,20 @@ def search_web(query, n=8, only=None, timeout=30):
     threads = []
     for name, fn in active.items():
         def _arbeite(_n=name, _f=fn):
-            # Rate-Limit (Shiraberu): pro Quelle drosseln
+            # TTL-Cache zuerst (F5: kein throttle bei Cache-Hit — kein Netz!)
+            try:
+                import cache as _cache
+                treffer = _cache.get("web", _n, query, n)
+                if treffer is not None:
+                    # F1: Cache-Treffer = KEIN Health-Signal → Status 'cached'
+                    ergebnis_q.put((_n, "cached", treffer))
+                    return
+            except Exception:
+                pass
+            # Rate-Limit (Shiraberu): pro Quelle drosseln (nur bei echtem Request)
             try:
                 import ratelimit
                 ratelimit.throttle(_n)
-            except Exception:
-                pass
-            # TTL-Cache: gleiche (Quelle, Query, n) binnen 15 Min aus Cache
-            try:
-                import cache as _cache
-                treffer = _cache.get(_n, query, n)
-                if treffer is not None:
-                    ergebnis_q.put((_n, treffer))
-                    return
             except Exception:
                 pass
             try:
@@ -407,13 +410,13 @@ def search_web(query, n=8, only=None, timeout=30):
                 if ergebnis:
                     try:
                         import cache as _cache
-                        _cache.put(_n, query, n, ergebnis)
+                        _cache.put("web", _n, query, n, ergebnis)
                     except Exception:
                         pass
-                ergebnis_q.put((_n, ergebnis))
+                ergebnis_q.put((_n, "ok", ergebnis))
             except Exception as e:
                 _log_web_error(_n, e)
-                ergebnis_q.put((_n, []))
+                ergebnis_q.put((_n, "err", []))
         t = _t.Thread(target=_arbeite, daemon=True)
         t.start(); threads.append(t)
 
@@ -423,10 +426,11 @@ def search_web(query, n=8, only=None, timeout=30):
     quellen_abgeschlossen = set()  # F3-Codex: nur GEMELDETE Quellen healthen
     while offen > 0 and _time.monotonic() - t_start < timeout:
         try:
-            name, payload = ergebnis_q.get(timeout=0.2)
+            name, status, payload = ergebnis_q.get(timeout=0.2)
             offen -= 1
-            quellen_abgeschlossen.add(name)
-            if payload:
+            if status != "cached":
+                quellen_abgeschlossen.add(name)  # F1: Cache ≠ abgeschlossen
+            if payload and status == "ok":
                 quellen_mit_treffern.add(name)
             for it in payload:
                 key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
