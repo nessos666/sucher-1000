@@ -54,7 +54,7 @@ def _lade_keys():
 
 def _speichere_keys(d):
     KEYS_DIR.mkdir(parents=True, exist_ok=True)
-    lines = [f"# SUCHER-1000 API-Keys (chmod 600 — nicht teilen!)\n"]
+    lines = ["# SUCHER-1000 API-Keys (chmod 600 — nicht teilen!)\n"]
     for k, v in sorted(d.items()):
         lines.append(f"{k}={v}\n")
     KEYS_FILE.write_text("".join(lines), encoding="utf-8")
