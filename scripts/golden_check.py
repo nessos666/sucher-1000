@@ -34,8 +34,7 @@ def _url_domain(url):
             u = u[len(prefix):]
             break
     u = u.split("/")[0].split("?")[0]
-    if u.startswith("www."):
-        u = u[4:]
+    u = u.removeprefix("www.")
     return u
 
 
