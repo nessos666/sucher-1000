@@ -348,10 +348,22 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     threads = []
     for name, fn, qy in tasks:
         def _run(name=name, fn=fn, qy=qy):
+            # F6 (OpenCode): Fehler-Zählerstand VOR dem Aufruf merken — der
+            # Worker meldet seinen EIGENEN Fehlerstatus im Tupel mit, statt dass
+            # der Health-Commit das globale Register liest (das verwaiste
+            # Daemon-Threads aus Lauf 1 nach clear() von Lauf 2 verfälschen könnten).
             try:
-                ergebnis_q.put((name, "ok", list(fn(qy, n))))
+                with _QUELLEN_FEHLER_LOCK:
+                    vorher = _QUELLEN_FEHLER.get(name, (None, 0))[1]
+                payload = list(fn(qy, n))
+                with _QUELLEN_FEHLER_LOCK:
+                    nachher = _QUELLEN_FEHLER.get(name, (None, 0))[1]
+                hatte_fehler = nachher > vorher
+                ergebnis_q.put((name, "ok" if not hatte_fehler else "err_lokal",
+                                payload, hatte_fehler))
             except Exception as e:
-                ergebnis_q.put((name, "err", e))
+                _log_quellenfehler(name, e)
+                ergebnis_q.put((name, "err", [], True))
         t = _t.Thread(target=_run, daemon=True)
         t.start()
         threads.append(t)
@@ -359,9 +371,10 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     # Ergebnisse einsammeln bis Budget abläuft oder alle fertig sind
     offen = len(tasks)
     quellen_mit_treffern = set()
+    quellen_mit_fehler = {}   # F6: quelle -> (fehlertext, hatte_fehler) pro Lauf
     while offen > 0 and _time.monotonic() - t_start < budget_s:
         try:
-            name, status, payload = ergebnis_q.get(timeout=0.2)
+            name, status, payload, hatte_fehler = ergebnis_q.get(timeout=0.2)
             offen -= 1
             if status == "ok":
                 if payload:
@@ -372,6 +385,11 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                         seen.add(key); results.append(it)
             else:
                 _log_quellenfehler(name, payload)
+            if hatte_fehler and name not in quellen_mit_treffern:
+                # Fehlertext aus dem Lauf-Register (nur wenn dieser Lauf ihn setzte)
+                with _QUELLEN_FEHLER_LOCK:
+                    fehlertext = _QUELLEN_FEHLER.get(name, ("", 0))[0]
+                quellen_mit_fehler[name] = fehlertext
         except _queue.Empty:
             continue  # noch keine Antwort — weiter auf Budget warten
 
@@ -385,13 +403,14 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     #   - Quelle steht im Fehlerregister UND keine Variante lieferte Treffer → Fehler
     # Das verhindert: (a) _error-Fehler als HEALTHY (alter Bug), (b) 3 Varianten =
     # 3 consecutive fails → zu schnelles BROKEN, (c) Completion-Order-Abhängigkeit.
+    # F6: Health liest NUR quellen_mit_fehler (pro Lauf vom Worker gemeldet),
+    # NICHT das globale _QUELLEN_FEHLER (verwaiste Threads können es verfälschen).
     if _reg is not None:
         try:
             aktive_quellen = {name for name, _fn, _qy in tasks}
             for name in aktive_quellen:
-                fehlerinfo = _QUELLEN_FEHLER.get(name)
-                hat_fehler = fehlerinfo is not None and fehlerinfo[1] > 0
-                fehlertext = fehlerinfo[0] if fehlerinfo else ""
+                hat_fehler = name in quellen_mit_fehler
+                fehlertext = quellen_mit_fehler.get(name, "")
                 if hat_fehler and name not in quellen_mit_treffern:
                     _reg.record_outcome(name, ok=False, error=fehlertext)
                 else:
