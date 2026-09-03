@@ -20,7 +20,6 @@ Regeln:
 - Komplett Hermes-unabhängig: nur stdlib + ddgs/requests
 """
 import os, re, sys, json, time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
 
@@ -137,16 +136,112 @@ def q_serpapi(query, n=8):
         _log_web_error("SerpApi", e)
     return out
 
+# ---------- Quelle 5: Mojeek (key-frei, Captcha-sicher über net.get_text) ----------
+def q_mojeek(query, n=8):
+    """Mojeek-Suche. Nutzt net.get_text → Captcha/Botwall wird ERKANNT (nicht geparst).
+
+    Mojeek blockt seit 03.09.2026 mit Captcha — dann kommt eine saubere Meldung
+    statt Müll. Sobald Mojeek wieder freigibt, parst diese Funktion echte
+    Ergebnisse (class="ob"-Links).
+    """
+    import urllib.parse
+    try:
+        import net
+    except ImportError:
+        _log_web_error("Mojeek", "net fehlt")
+        return []
+    out = []
+    url = "https://www.mojeek.com/search?" + urllib.parse.urlencode({"q": query})
+    text, err = net.get_text(url, timeout=12)
+    if err:
+        _log_web_error("Mojeek", f"Block/Fehler: {err}")
+        return []
+    # Ergebnis-Block: <h2><a class="ob" href="URL">Titel</a></h2> + <p class="s">Snippet</p>
+    for m in re.finditer(r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', text, re.S):
+        link, raw_title = m.group(1), m.group(2)
+        title = re.sub(r"<[^>]+>", "", raw_title).strip()
+        if not link.startswith("http") or not title:
+            continue
+        # Snippet: <p class="s"> nach dem h2
+        snip_m = re.search(r'<p class="s">(.*?)</p>', text[m.end():], re.S)
+        snippet = re.sub(r"<[^>]+>", "", snip_m.group(1)).strip()[:200] if snip_m else ""
+        out.append({"title": title, "year": None, "venue": "Web", "is_oa": True,
+                    "pdf": None, "doi": None, "source": "Mojeek", "url": link,
+                    "snippet": snippet})
+        if len(out) >= n:
+            break
+    if not out:
+        # 0 Treffer OHNE Fehler möglich (leere Ergebnismenge) — kein Log nötig
+        return []
+    return out
+
+
+# ---------- Quelle 6: Wikipedia DE+EN (key-frei, zuverlässig) ----------
+def q_wikipedia_web(query, n=8):
+    """Wikipedia-Suche über die offene MediaWiki-API — Deutsch + Englisch parallel."""
+    import urllib.request, urllib.parse
+    out = []
+    for lang in ("de", "en"):
+        try:
+            url = f"https://{lang}.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
+                "action": "query", "list": "search", "srsearch": query,
+                "format": "json", "srlimit": min(n, 10)})
+            req = urllib.request.Request(url, headers=UA)
+            j = json.loads(urllib.request.urlopen(req, timeout=12).read())
+            for r in j.get("query", {}).get("search", [])[:n]:
+                t = r.get("title", "")
+                if not t:
+                    continue
+                page_url = f"https://{lang}.wikipedia.org/wiki/" + urllib.parse.quote(t.replace(" ", "_"))
+                out.append({"title": t, "year": None, "venue": "Wikipedia",
+                            "is_oa": True, "pdf": None, "doi": None,
+                            "source": "Wikipedia", "url": page_url,
+                            "snippet": re.sub(r"<[^>]+>", "", r.get("snippet", ""))[:200]})
+        except Exception as e:
+            _log_web_error(f"Wikipedia-{lang}", e)
+    return out[:n]
+
+
+# ---------- Quelle 7: Exa (semantisch, Key optional) ----------
+def q_exa(query, n=8):
+    """Exa-Suche (semantische Websuche). Key optional: EXA_API_KEY in Env."""
+    key = _env("EXA_API_KEY")
+    if not key:
+        print("  ⚠ [Exa] übersprungen (kein EXA_API_KEY in Env)", file=sys.stderr)
+        return []
+    out = []
+    try:
+        import urllib.request, json as _json
+        body = _json.dumps({"query": query, "numResults": n}).encode()
+        req = urllib.request.Request("https://api.exa.ai/search",
+            data=body, headers={"Content-Type": "application/json",
+                                "x-api-key": key})
+        j = _json.loads(urllib.request.urlopen(req, timeout=20).read())
+        for r in j.get("results", []):
+            out.append({"title": r.get("title", ""), "year": None, "venue": "Web",
+                        "is_oa": True, "pdf": None, "doi": None,
+                        "source": "Exa", "url": r.get("url"),
+                        "snippet": (r.get("text") or "")[:250]})
+    except Exception as e:
+        _log_web_error("Exa", e)
+    return out
+
+
 # ---------- Register ----------
-WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "tavily": q_tavily, "serpapi": q_serpapi}
+WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
+       "wikipedia": q_wikipedia_web, "tavily": q_tavily, "exa": q_exa,
+       "serpapi": q_serpapi}
 
 def search_web(query, n=8, only=None, timeout=30):
     """Alle Web-Quellen PARALLEL durchsuchen, aus allen sammeln.
 
     Parallele Ausführung → Gesamtzeit = langsamste Quelle, nicht Summe.
-    Timeout HART: nach timeout-Sekunden wird abgebrochen, Teilergebnisse bleiben
-    (F1 — Executor ohne Kontextmanager, shutdown(wait=False)).
+    Timeout HART: nach timeout-Sekunden wird abgebrochen, Teilergebnisse bleiben.
+    Daemon-Threads (F1): keine non-daemon Worker → kein Prozess-Exit-Hang.
     """
+    import queue as _queue
+    import threading as _t
+    import time as _time
     active = dict(WEB)
     if only:
         if only in active:
@@ -157,23 +252,32 @@ def search_web(query, n=8, only=None, timeout=30):
                   file=sys.stderr)
             return []
     results, seen = [], set()
-    ex = ThreadPoolExecutor(max_workers=min(8, len(active)))
-    futs = {ex.submit(fn, query, n): name for name, fn in active.items()}
-    try:
+    ergebnis_q = _queue.Queue()
+    threads = []
+    for name, fn in active.items():
+        def _arbeite(_n=name, _f=fn):
+            try:
+                ergebnis_q.put((_n, _f(query, n)))
+            except Exception as e:
+                _log_web_error(_n, e)
+                ergebnis_q.put((_n, []))
+        t = _t.Thread(target=_arbeite, daemon=True)
+        t.start(); threads.append(t)
+
+    t_start = _time.monotonic()
+    offen = len(threads)
+    while offen > 0 and _time.monotonic() - t_start < timeout:
         try:
-            for fut in as_completed(futs, timeout=timeout):
-                try:
-                    for it in fut.result():
-                        key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
-                        if key and key not in seen:
-                            seen.add(key); results.append(it)
-                except Exception as e:
-                    _log_web_error(futs[fut], e)
-        except Exception as e:
-            _log_web_error("Parallel", f"Timeout nach {timeout}s: {e}")
-    finally:
-        # wait=False: search_web kehrt sofort zurück, hängende Threads blockieren nicht (F1)
-        ex.shutdown(wait=False, cancel_futures=True)
+            name, payload = ergebnis_q.get(timeout=0.2)
+            offen -= 1
+            for it in payload:
+                key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
+                if key and key not in seen:
+                    seen.add(key); results.append(it)
+        except _queue.Empty:
+            continue  # noch keine Antwort — weiter auf Budget warten
+
+    # Verwaiste Threads NICHT joinen — daemon, sterben mit Prozess (F1)
     return results
 
 def list_web():
