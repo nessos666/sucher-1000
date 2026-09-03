@@ -95,10 +95,10 @@ def _erwartung_getroffen(erwartete, domains, dois):
                 hit = True
                 break
             for k in (2, 3):
-                if len(elabels) >= k and len(dlabels) >= k:
-                    if elabels[-k:] == dlabels[-k:]:
-                        hit = True
-                        break
+                if (len(elabels) >= k and len(dlabels) >= k
+                        and elabels[-k:] == dlabels[-k:]):
+                    hit = True
+                    break
             if hit:
                 break
         treffer.append((e, hit))
