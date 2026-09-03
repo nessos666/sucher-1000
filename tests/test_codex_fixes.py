@@ -1,4 +1,5 @@
 """Codex-Review-Fixes: RED-Tests für Findings 1-7 (F1-F7)."""
+import os
 import sys
 import time
 import urllib.error
@@ -87,7 +88,7 @@ def test_f3_q_base_nutzt_net(monkeypatch):
 # F4: health_check --json gibt NUR JSON aus
 
 @pytest.mark.live
-def test_f4_health_json_clean(monkeypatch, capsys):
+def test_f4_health_json_clean(monkeypatch, capsys, tmp_path):
     """--json muss ausschließlich gültiges JSON auf stdout geben.
 
     F10 (OpenCode): Live-Netz-Test (ruft echte Quellen + verbraucht API-Quota)
@@ -98,9 +99,11 @@ def test_f4_health_json_clean(monkeypatch, capsys):
     # Direkter Test der Logik: --json-Zweig darf keine Prints mischen
     # (Wir testen das Verhalten über ein Sub-Skript, da health_check Netz braucht)
     import subprocess, sys as _sys
+    env = dict(os.environ, SUCHER_HEALTH_FILE=str(tmp_path / "h_live_test.json"))
     r = subprocess.run(
         [_sys.executable, "scripts/health_check.py", "--json", "--modus", "web"],
-        capture_output=True, text=True, timeout=60, cwd=str(Path(__file__).resolve().parents[1]))
+        capture_output=True, text=True, timeout=60, cwd=str(Path(__file__).resolve().parents[1]),
+        env=env)
     # stdout muss als GANZES parsebar sein
     try:
         data = _json.loads(r.stdout)

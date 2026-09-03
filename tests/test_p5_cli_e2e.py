@@ -16,7 +16,8 @@ import store as store_mod
 def test_cli_speichert_in_sqlite(tmp_path):
     """Echte CLI-Suche (1 Treffer reicht) schreibt queries+ergebnisse in SUCHER_DB."""
     db = tmp_path / "cli_e2e.db"
-    env = dict(os.environ, SUCHER_DB=str(db))
+    env = dict(os.environ, SUCHER_DB=str(db),
+               SUCHER_HEALTH_FILE=str(tmp_path / "cli_e2e_health.json"))
     # Kleine, schnelle Query; Modus studien nutzt APIs (kann 0 Treffer geben bei Netzproblemen)
     proc = subprocess.run(
         [sys.executable, "sucher.py", "pardo evaluation", "1", "--modus", "studien"],
@@ -39,7 +40,8 @@ def test_cli_speichert_in_sqlite(tmp_path):
 def test_cli_0_treffer_kein_crash(tmp_path):
     """Auch 0 Treffer (Netz down) dürfen die CLI nicht crashen lassen."""
     db = tmp_path / "cli_empty.db"
-    env = dict(os.environ, SUCHER_DB=str(db))
+    env = dict(os.environ, SUCHER_DB=str(db),
+               SUCHER_HEALTH_FILE=str(tmp_path / "cli_empty_health.json"))
     # Query die garantiert nichts findet + Modus web (lokal, schnell)
     proc = subprocess.run(
         [sys.executable, "sucher.py", "zzzqqqxxyyy", "1", "--modus", "web"],

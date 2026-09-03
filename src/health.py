@@ -32,7 +32,9 @@ NO_KEY = "NO_KEY"
 COOLDOWN_S = 3600  # 60 Minuten
 
 BASE = Path(__file__).resolve().parents[1]
-DEFAULT_HEALTH_FILE = BASE / "data" / "health.json"
+# Env-Override für Tests/Portabilität: SUCHER_HEALTH_FILE=/pfad/health.json
+DEFAULT_HEALTH_FILE = Path(os.environ.get("SUCHER_HEALTH_FILE",
+                                           str(BASE / "data" / "health.json")))
 
 # Grenzen (nur Konstanten — Logik in record_outcome)
 MAX_FAILS_DEGRADED = 2   # ab 2 consecutive fails → DEGRADED

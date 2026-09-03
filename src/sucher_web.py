@@ -8,9 +8,12 @@ sondern ein Bündel — ein Befehl durchsucht mehrere Engines.
 
 Quellen (live getestet 03.09.2026):
   q_ddgs        — DuckDuckGo (Python-Lib, kein Key, blockt gelegentlich)
-  q_bing_html   — Bing via HTML (kein Key, brauchbar)
+  q_bing_html   — Bing via HTML/RSS (kein Key, brauchbar)
+  q_mojeek      — Mojeek (kein Key; Captcha-Block seit 03.09.2026 wird ERKANNT
+                  und gemeldet — Source bleibt aktiv, Health cooldowned nach 3 Fails)
+  q_wikipedia_web — Wikipedia DE+EN (MediaWiki-API, kein Key)
   q_tavily      — Tavily API (Env-Key TAVILY_API_KEY, karte-frei, 1000/Monat)
-  q_mojeek      — Mojeek (AUS: Botwall seit 03.09.2026, nur 5KB Blockseite)
+  q_exa         — Exa semantisch (Env-Key EXA_API_KEY, optional)
   q_serpapi     — Google-Rankings via SerpApi (Env-Key, optional)
 
 Regeln:
@@ -19,9 +22,13 @@ Regeln:
 - Eine Quelle tot → andere liefern weiter + Fehler wird geloggt
 - Komplett Hermes-unabhängig: nur stdlib + ddgs/requests
 """
-import os, re, sys, json, time
+import os, re, sys, json, time, threading
 
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"}
+
+# Lauf-Register für Web-Fehler (P6-B2) — analog sucher_universal._QUELLEN_FEHLER
+_WEB_FEHLER = {}
+_WEB_FEHLER_LOCK = threading.Lock()
 
 def _env(name):
     """Key aus Env lesen (auch ~/.hermes/.env als Fallback, wenn vorhanden)."""
@@ -41,6 +48,17 @@ def _log_web_error(quelle, exc):
     """Fehler sichtbar machen (nie still schlucken)."""
     msg = str(exc)[:100]
     print(f"  ⚠ [{quelle}] Fehler: {msg}", file=sys.stderr)
+    # P6-B2: Web-Fehler auch ins Lauf-Register (für Health-Anbindung)
+    try:
+        with _WEB_FEHLER_LOCK:
+            alt = _WEB_FEHLER.get(quelle)
+            if alt:
+                _WEB_FEHLER[quelle] = (msg, alt[1] + 1)
+            else:
+                _WEB_FEHLER[quelle] = (msg, 1)
+    except Exception:
+        pass
+
 
 # ---------- Quelle 1: DuckDuckGo (ddgs) ----------
 def q_ddgs(query, n=8):
@@ -227,6 +245,10 @@ def q_exa(query, n=8):
     return out
 
 
+# Key-Quellen → Env-Variablen (für NO_KEY-Handling)
+KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
+                   "serpapi": "SERPAPI_API_KEY"}
+
 # ---------- Register ----------
 WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
        "wikipedia": q_wikipedia_web, "tavily": q_tavily, "exa": q_exa,
@@ -242,6 +264,16 @@ def search_web(query, n=8, only=None, timeout=30):
     import queue as _queue
     import threading as _t
     import time as _time
+
+    # P6-B2: Health-Registry auch für Web-Quellen — BROKEN (Cooldown) überspringen
+    try:
+        import health as _health
+        _reg = _health.HealthRegistry()
+    except Exception:
+        _reg = None
+    with _WEB_FEHLER_LOCK:
+        _WEB_FEHLER.clear()  # frisches Lauf-Register (F5-Muster)
+
     active = dict(WEB)
     if only:
         if only in active:
@@ -251,6 +283,33 @@ def search_web(query, n=8, only=None, timeout=30):
             print(f"  ⚠ Unbekannte Web-Quelle '{only}' — verfügbar: {', '.join(active.keys())}",
                   file=sys.stderr)
             return []
+    # BROKEN/NO_KEY-Quellen überspringen (P4-Mechanik auch für Web)
+    if _reg is not None:
+        uebersprungen = []
+        for name in list(active.keys()):
+            skip, grund = _reg.is_skippable(name)
+            if skip:
+                # Selbstheilung: NO_KEY + Key JETZT vorhanden → Quelle darf laufen
+                if "NO_KEY" in grund and _env(KEY_QUELLEN_MAP.get(name, "")):
+                    continue
+                del active[name]
+                uebersprungen.append((name, grund))
+        for name, grund in uebersprungen:
+            print(f"  ⏭ [{name}] übersprungen: {grund}", file=sys.stderr)
+    # Key-Quellen ohne Env-Key: NICHT starten, als NO_KEY markieren (kein ok=True!)
+    if _reg is not None:
+        for name in list(active.keys()):
+            envvar = KEY_QUELLEN_MAP.get(name)
+            if envvar and not _env(envvar):
+                del active[name]
+                _reg.mark_no_key(name)
+                print(f"  ⚠ [{name}] übersprungen (kein {envvar} in Env)", file=sys.stderr)
+        try:
+            _reg.save()  # auch wenn gleich 0 aktive bleiben — NO_KEY muss persistieren
+        except Exception:
+            pass
+    if not active:
+        return []
     results, seen = [], set()
     ergebnis_q = _queue.Queue()
     threads = []
@@ -266,10 +325,13 @@ def search_web(query, n=8, only=None, timeout=30):
 
     t_start = _time.monotonic()
     offen = len(threads)
+    quellen_mit_treffern = set()
     while offen > 0 and _time.monotonic() - t_start < timeout:
         try:
             name, payload = ergebnis_q.get(timeout=0.2)
             offen -= 1
+            if payload:
+                quellen_mit_treffern.add(name)
             for it in payload:
                 key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
                 if key and key not in seen:
@@ -278,11 +340,28 @@ def search_web(query, n=8, only=None, timeout=30):
             continue  # noch keine Antwort — weiter auf Budget warten
 
     # Verwaiste Threads NICHT joinen — daemon, sterben mit Prozess (F1)
+
+    # P6-B2: Health pro Quelle genau EINMAL committen (aggregiert, nicht pro Thread)
+    if _reg is not None:
+        try:
+            with _WEB_FEHLER_LOCK:
+                fehler_register = dict(_WEB_FEHLER)
+            for name in list(active.keys()):
+                fehlerinfo = fehler_register.get(name)
+                hat_fehler = fehlerinfo is not None and fehlerinfo[1] > 0
+                fehlertext = fehlerinfo[0] if fehlerinfo else ""
+                if hat_fehler and name not in quellen_mit_treffern:
+                    _reg.record_outcome(name, ok=False, error=fehlertext)
+                else:
+                    _reg.record_outcome(name, ok=True)
+            _reg.save()
+        except Exception:
+            pass
     return results
 
 def list_web():
     for name, fn in WEB.items():
-        needs = "Key" if name in ("tavily", "serpapi") else "frei"
+        needs = "Key" if name in ("tavily", "serpapi", "exa") else "frei"
         print(f"  {name:10s} ({needs})")
 
 

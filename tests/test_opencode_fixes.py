@@ -1,4 +1,5 @@
 """OpenCode-Review-Fixes: RED-Tests (F1 Prozess-Exit, F3 _error-Logging, F7 Determinismus, F10 Offline)."""
+import os
 import subprocess
 import sys
 import time
@@ -15,7 +16,7 @@ import sucher_universal as su
 
 # F1: Prozess darf nach Budget-Timeout NICHT hängen (Exit-Hang)
 
-def test_f1_prozess_exit_haengt_nicht():
+def test_f1_prozess_exit_haengt_nicht(tmp_path):
     """Nach Budget-Timeout muss der PROZESS sofort enden (nicht nur search()).
 
     Vorher: non-daemon Worker-Threads → Prozess joint sie beim Exit und hängt
@@ -35,9 +36,10 @@ su.GENERAL = {}
 res = su.search("test", 3, mode="studien", budget_s=2)
 print("SEARCH_DONE")
 '''
+    env = dict(os.environ, SUCHER_HEALTH_FILE=str(tmp_path / "h_f1.json"))
     t0 = time.monotonic()
     r = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                       text=True, timeout=10, cwd=str(REPO))
+                       text=True, timeout=10, cwd=str(REPO), env=env)
     dt = time.monotonic() - t0
     assert r.returncode == 0, f"Prozess fehlgeschlagen: {r.stderr[:200]}"
     assert "SEARCH_DONE" in r.stdout

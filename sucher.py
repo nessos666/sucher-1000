@@ -47,7 +47,7 @@ def main():
 
     if args.setup:
         print("=== SUCHER 1000 — Setup-Check ===")
-        for mod in ("sucher_universal","sucher_oa","sucher_download","sucher_web"):
+        for mod in ("sucher_universal","sucher_oa","sucher_download","sucher_web","store","health"):
             try:
                 __import__(mod); print(f"  ✓ {mod}")
             except ImportError:
