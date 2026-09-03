@@ -905,6 +905,7 @@ def q_autosuggest(query, n=8):
     Themen-Erkundung/Keyword-Ideen.
     """
     import json as _json
+
     import net as _net
     out = []
     url = "https://suggestqueries.google.com/complete/search?" + urllib.parse.urlencode(
