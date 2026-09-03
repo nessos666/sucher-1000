@@ -39,11 +39,17 @@ def test_cli_speichert_in_sqlite(tmp_path):
 
 
 def test_cli_0_treffer_kein_crash(tmp_path):
-    """Auch 0 Treffer (Netz down) dürfen die CLI nicht crashen lassen."""
+    """Auch 0 Treffer (Netz down) dürfen die CLI nicht crashen lassen.
+
+    N2 (OpenCode-6-10): SUCHER_FAKE_NET=1 mockt den Transport im Subprozess
+    offline — vorher ging der Test mit bis zu 23 echten Requests ins Netz
+    (Offline-Suite-Versprechen verletzt, fremde API-Quota verbraucht).
+    """
     db = tmp_path / "cli_empty.db"
     env = dict(os.environ, SUCHER_DB=str(db),
                SUCHER_HEALTH_FILE=str(tmp_path / "cli_empty_health.json"),
-               SUCHER_CACHE_DB=str(tmp_path / "cli_empty_cache.db"))
+               SUCHER_CACHE_DB=str(tmp_path / "cli_empty_cache.db"),
+               SUCHER_FAKE_NET="1")
     # Query die garantiert nichts findet + Modus web (lokal, schnell)
     proc = subprocess.run(
         [sys.executable, "sucher.py", "zzzqqqxxyyy", "1", "--modus", "web"],

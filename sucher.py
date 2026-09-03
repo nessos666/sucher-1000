@@ -40,6 +40,17 @@ def ensure_src_imports():
         import sucher_oa
         import sucher_universal
         import sucher_web
+        # N2 (OpenCode-6-10): Test-Hook für Subprozess-Tests — SUCHER_FAKE_NET=1
+        # schaltet den Transport offline (jede URL schlägt fehl), damit
+        # CLI-E2E-Tests NICHT ins echte Netz gehen (Offline-Suite-Versprechen).
+        if os.environ.get("SUCHER_FAKE_NET") == "1":
+            import net
+            class _FakeOffline:
+                def open(self, url, timeout=8, headers=None):
+                    raise ConnectionError("fake offline (SUCHER_FAKE_NET=1)")
+            net._transport = _FakeOffline()
+            net._try_proxy = lambda *a, **k: None
+            net._try_proxy_post = lambda *a, **k: None
         return sucher_universal, sucher_oa, sucher_download, sucher_web, store
     except ImportError as e:
         log(f"Import-Fehler: {e}", "ERROR"); raise
@@ -48,8 +59,8 @@ def main():
     ap = argparse.ArgumentParser(description="SUCHER 1000 — großes Studien-Tool")
     ap.add_argument("query", nargs="?", help="Suchbegriff")
     ap.add_argument("n", nargs="?", type=int, default=8,
-                    help="Anzahl PRO QUELLE (default 8) — bei 10 Web-Quellen "
-                         "also bis zu ~80 Treffer; kleiner wählen für wenige")
+                    help="Anzahl PRO QUELLE (default 8) — bei 24 Web-Quellen "
+                         "also bis zu ~192 Treffer; kleiner wählen für wenige")
     ap.add_argument("--modus", default="universal", help="studien|universal|alle|web")
     ap.add_argument("--out", default=DEFAULT_OUT, help="Zielordner")
     ap.add_argument("--download", action="store_true", help="Automatisch frei ladbare herunterladen")
@@ -87,12 +98,21 @@ def main():
     log(f"Suche start: {args.query} (modus={args.modus})")
     if args.modus == "alle":
         # F3 (OpenCode-Gesamt): 'alle' = Studien + Web-Bündel parallel (Kombi)
+        # M3 (OpenCode-6-10): EINE gemeinsame HealthRegistry an beide Fanouts —
+        # zwei Instanzen überschreiben sich in save() gegenseitig (Lost-Update).
         import threading
+        try:
+            import health
+            gemeinsame_reg = health.HealthRegistry()
+        except Exception:  # noqa: S110 - Fallback: ohne gemeinsame Instanz
+            gemeinsame_reg = None
         ergebnisse = {}
         def _studien():
-            ergebnisse["studien"] = su.search(args.query, args.n, mode="universal")
+            ergebnisse["studien"] = su.search(args.query, args.n, mode="universal",
+                                              health_reg=gemeinsame_reg)
         def _web():
-            ergebnisse["web"] = sw.search_web(args.query, args.n)
+            ergebnisse["web"] = sw.search_web(args.query, args.n,
+                                              health_reg=gemeinsame_reg)
         t1 = threading.Thread(target=_studien, daemon=True); t1.start()
         t2 = threading.Thread(target=_web, daemon=True); t2.start()
         t1.join(timeout=35); t2.join(timeout=35)

@@ -7,14 +7,29 @@ Eingebaut nach Davids Korrektur (03.09.2026): NICHT eine Web-Suche,
 sondern ein Bündel — ein Befehl durchsucht mehrere Engines.
 
 Quellen (live getestet 03.09.2026):
-  q_ddgs        — DuckDuckGo (Python-Lib, kein Key, blockt gelegentlich)
-  q_bing_html   — Bing via HTML/RSS (kein Key, brauchbar)
-  q_mojeek      — Mojeek (kein Key; Captcha-Block seit 03.09.2026 wird ERKANNT
-                  und gemeldet — Source bleibt aktiv, Health cooldowned nach 3 Fails)
-  q_wikipedia_web — Wikipedia DE+EN (MediaWiki-API, kein Key)
-  q_tavily      — Tavily API (Env-Key TAVILY_API_KEY, karte-frei, 1000/Monat)
-  q_exa         — Exa semantisch (Env-Key EXA_API_KEY, optional)
-  q_serpapi     — Google-Rankings via SerpApi (Env-Key, optional)
+  q_ddgs            — DuckDuckGo (Python-Lib, kein Key, blockt gelegentlich)
+  q_bing_html       — Bing via HTML/RSS (kein Key, brauchbar)
+  q_mojeek          — Mojeek (kein Key; Captcha-Block wird ERKANNT)
+  q_wikipedia_web   — Wikipedia DE+EN (MediaWiki-API, kein Key)
+  q_hn              — HackerNews (Algolia-API, kein Key)
+  q_google_news     — Google News RSS (kein Key)
+  q_bing_news       — Bing News RSS (kein Key)
+  q_stackexchange   — StackOverflow + SE-Sites (kein Key)
+  q_wikis           — Wikiquote/Wikinews/Wikisource DE+EN (kein Key)
+  q_openlibrary     — OpenLibrary Bücher (kein Key)
+  q_archive         — Internet Archive (kein Key)
+  q_github          — GitHub Repo-Suche (kein Key)
+  q_huggingface     — HuggingFace Models+Datasets (kein Key)
+  q_patents         — Google Patents XHR (kein Key, blockt bei Flut)
+  q_youtube         — YouTube InnerTube (kein Key, inoffiziell)
+  q_google_scholar  — Google Scholar HTML (kein Key, captcha-Gefahr)
+  q_autosuggest     — Google-Autosuggest (kein Key)
+  q_tavily          — Tavily API (Env-Key TAVILY_API_KEY, karte-frei)
+  q_exa             — Exa semantisch (Env-Key EXA_API_KEY, optional)
+  q_serpapi         — Google-Rankings via SerpApi (Env-Key, optional)
+  q_reddit          — Reddit Data-API OAuth (Env-Key REDDIT_CLIENT_ID, optional)
+  q_knowledgegraph  — Google Knowledge Graph (Env-Key, optional)
+  q_google_books    — Google Books (Env-Key, optional, anonym 429)
 
 Regeln:
 - Key-freie Quellen laufen IMMER (Grundlast)
@@ -57,15 +72,16 @@ def _web_fehler_count(name):
     Register-Key 'mojeek'). Der Worker-Vergleich (F4) braucht DIESELBE
     Normalisierung wie der Health-Commit, sonst bleibt der Zähler 0 und
     eine kranke Quelle wird HEALTHY (Regression durch F4-Fix).
+    M5 (OpenCode-6-10): KEIN Präfix-Fallback, sonst maskiert 'bing' den Fehler
+    von 'bing_news' (Präfix-Kollision). Case-insensitiver MATCH (Mojeek↔mojeek)
+    bleibt — über k.lower()==low, das ist kein Präfix-Vergleich.
     """
     with _WEB_FEHLER_LOCK:
         if name in _WEB_FEHLER:
             return _WEB_FEHLER[name][1]
         low = name.lower()
-        if low in _WEB_FEHLER:
-            return _WEB_FEHLER[low][1]
         for label, info in _WEB_FEHLER.items():
-            if label.lower().startswith(low) or low.startswith(label.lower()):
+            if label.lower() == low:
                 return info[1]
         return 0
 
@@ -549,7 +565,8 @@ def q_wikis(query, n=8):
         except Exception as e:
             _log_web_error("wikis", f"{lang}.{proj}: {e}")
             continue
-    return out
+    return out[:n]  # M4 (OpenCode-6-10): n-Obergrenze — 6 Sub-Projekte dürfen
+    # die n-Semantik nicht sprengen (vorher bis zu 30 Treffer bei n=8)
 
 
 def q_openlibrary(query, n=8):
@@ -729,7 +746,7 @@ def q_patents(query, n=8):
             if pid_clean.startswith("patent/"):
                 pid_clean = pid_clean.removeprefix("patent/")
             pid_clean = pid_clean.rstrip("/").removesuffix("/en")
-            pid_clean = pid_clean.removesuffix("/en")
+            # N6: zweites removesuffix wäre No-op — entfernt
             year = None
             pd = p.get("publication_date") or p.get("grant_date") or ""
             if len(pd) >= 4 and pd[:4].isdigit():
@@ -1112,12 +1129,14 @@ def _web_score_sort(results):
     return sorted(results, key=lambda r: (score(r), (r.get("title") or "")[:80]),
                   reverse=True)
 
-def search_web(query, n=8, only=None, timeout=30):
+def search_web(query, n=8, only=None, timeout=30, health_reg=None):
     """Alle Web-Quellen PARALLEL durchsuchen, aus allen sammeln.
 
     Parallele Ausführung → Gesamtzeit = langsamste Quelle, nicht Summe.
     Timeout HART: nach timeout-Sekunden wird abgebrochen, Teilergebnisse bleiben.
     Daemon-Threads (F1): keine non-daemon Worker → kein Prozess-Exit-Hang.
+    health_reg (M3/OpenCode-6-10): optionale GEMEINSAME HealthRegistry —
+    im Modus 'alle' teilen sich Studien- und Web-Fanout EINE Instanz.
     """
     import queue as _queue
     import threading as _t
@@ -1126,7 +1145,7 @@ def search_web(query, n=8, only=None, timeout=30):
     # P6-B2: Health-Registry auch für Web-Quellen — BROKEN (Cooldown) überspringen
     try:
         import health as _health
-        _reg = _health.HealthRegistry()
+        _reg = health_reg if health_reg is not None else _health.HealthRegistry()
     except Exception:
         _reg = None
     with _WEB_FEHLER_LOCK:
@@ -1253,16 +1272,15 @@ def search_web(query, n=8, only=None, timeout=30):
                 """Fehler-Eintrag zu einem Register-Key finden (F1-Fix).
 
                 q_*-Funktionen können unter leicht abweichendem Label loggen
-                ('Mojeek' vs. Key 'mojeek', 'Wikipedia-de' vs. 'wikipedia').
-                Normalisierung: exakt, dann lower, dann Präfix.
+                ('Mojeek' vs. Key 'mojeek'). M5 (OpenCode-6-10): KEIN
+                Präfix-Match (maskiert 'bing' die Fehler von 'bing_news') —
+                nur exakt + case-insensitiver Match.
                 """
                 if name in fehler_register:
                     return fehler_register[name]
                 low = name.lower()
-                if low in fehler_register:
-                    return fehler_register[low]
                 for label, info in fehler_register.items():
-                    if label.lower().startswith(low) or low.startswith(label.lower()):
+                    if label.lower() == low:
                         return info
                 return None
 
@@ -1288,7 +1306,9 @@ def search_web(query, n=8, only=None, timeout=30):
 
 def list_web():
     for name, fn in WEB.items():
-        needs = "Key" if name in ("tavily", "serpapi", "exa") else "frei"
+        # N1 (OpenCode-6-10): dynamisch aus KEY_QUELLEN_MAP — vorher zeigte das
+        # hartkodierte Tupel reddit/knowledgegraph/google_books fälschlich 'frei'
+        needs = "Key" if name in KEY_QUELLEN_MAP else "frei"
         print(f"  {name:10s} ({needs})")
 
 if __name__ == "__main__":

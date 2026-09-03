@@ -76,16 +76,18 @@ def test_stackexchange_fehler_leer(route_net, capsys):
 # ---------- q_wikis (Wikiquote/Wikinews/Wikisource DE+EN) ----------
 
 def test_wikis_parst_mediawiki(route_net):
-    """Adapter ruft mehrere Projekte; Treffer mit Projekt-URL."""
+    """Adapter ruft mehrere Projekte; Treffer mit Projekt-URL.
+
+    M4 (OpenCode-6-10): n ist Obergrenze — 6 Projekte liefern nicht mehr als n.
+    """
     for proj in ("de.wikiquote.org", "en.wikiquote.org", "de.wikinews.org",
                  "en.wikinews.org", "de.wikisource.org", "en.wikisource.org"):
         route_net.route(f"https://{proj}/w/api.php", route_net.ok_json(MW_JSON))
     out = web.q_wikis("linux", 3)
-    assert len(out) == 6, f"6 Projekte je 1 Treffer: {len(out)}"
+    assert len(out) <= 3, f"n=3 darf nicht mehr als 3 liefern: {len(out)}"
+    assert len(out) >= 1
     urls = [r["url"] for r in out]
     assert any("wikiquote.org" in u for u in urls)
-    assert any("wikinews.org" in u for u in urls)
-    assert any("wikisource.org" in u for u in urls)
     assert out[0]["source"] == "Wikis"
     assert out[0]["title"] == "Linux"
 

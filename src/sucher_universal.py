@@ -583,7 +583,7 @@ def resolve_sources(mode):
     if mode == "alle":      return {**SCI, **GENERAL}
     return dict(SCI)  # default
 
-def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False, sort_by="relevance", expand=True, budget_s=30):
+def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False, sort_by="relevance", expand=True, budget_s=30, health_reg=None):
     """Suche über alle aktiven Quellen — PARALLEL mit hartem Gesamtbudget (P3).
 
     - Quellen laufen gleichzeitig (ThreadPool), Gesamtzeit = langsamste Quelle,
@@ -591,6 +591,9 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     - Budget hart: nach budget_s Sekunden wird abgebrochen, Teilergebnisse bleiben
     - Dedup + Scoring NACH dem Fanout → deterministische Reihenfolge
     - Jede Quelle läuft in eigenem Thread; Fehler werden geloggt (P1), nie still
+    - health_reg (M3/OpenCode-6-10): optionale GEMEINSAME HealthRegistry —
+      im Modus 'alle' teilen sich Studien- und Web-Fanout EINE Instanz,
+      sonst überschreibt save() die Updates des jeweils anderen (Lost-Update).
     """
     import queue as _queue
     import threading as _t
@@ -619,7 +622,7 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     # P4: Health-Registry — BROKEN/NO_KEY-Quellen überspringen statt ertragen
     try:
         import health as _health
-        _reg = _health.HealthRegistry()
+        _reg = health_reg if health_reg is not None else _health.HealthRegistry()
     except Exception:
         _reg = None
     _übersprungen = []
@@ -696,6 +699,7 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     # Ergebnisse einsammeln bis Budget abläuft oder alle fertig sind
     offen = len(tasks)
     quellen_mit_treffern = set()
+    quellen_ok = set()  # M1/P4: Quellen mit ≥1 REINER ok-Variante (kein Fehler)
     quellen_mit_fehler = {}   # F6: quelle -> (fehlertext, hatte_fehler) pro Lauf
     quellen_abgeschlossen = set()  # F2-Codex: nur GEMELDETE Quellen healthen
     while offen > 0 and _time.monotonic() - t_start < budget_s:
@@ -705,6 +709,17 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
             if status != "cached":
                 quellen_abgeschlossen.add(name)  # F1: Cache-Treffer ≠ abgeschlossen
             if status == "ok":
+                quellen_ok.add(name)  # reine ok-Variante (kein Fehler geloggt)
+                if payload:
+                    quellen_mit_treffern.add(name)
+                for it in payload:
+                    key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
+                    if key and key not in seen:
+                        seen.add(key); results.append(it)
+            elif status == "err_lokal":
+                # M1 (OpenCode-6-10): Teiltreffer NICHT verwerfen — q_wikipedia
+                # DE tot/EN ok liefert payload mit EN-Treffern. Treffer aufnehmen,
+                # Health-Entscheidung unten (reine ok-Variante vs. nur err_lokal).
                 if payload:
                     quellen_mit_treffern.add(name)
                 for it in payload:
@@ -727,6 +742,12 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                 with _QUELLEN_FEHLER_LOCK:
                     fehlertext = _QUELLEN_FEHLER.get(name, ("", 0))[0]
                 quellen_mit_fehler[name] = fehlertext
+            elif status == "err_lokal":
+                # M1/F15: err_lokal = Treffer UND Fehler → in quellen_mit_fehler
+                # (Health ok=False), auch wenn Treffer vorhanden sind.
+                with _QUELLEN_FEHLER_LOCK:
+                    fehlertext = _QUELLEN_FEHLER.get(name, ("", 0))[0]
+                quellen_mit_fehler[name] = fehlertext
         except _queue.Empty:
             continue  # noch keine Antwort — weiter auf Budget warten
 
@@ -742,6 +763,9 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     # 3 consecutive fails → zu schnelles BROKEN, (c) Completion-Order-Abhängigkeit.
     # F6: Health liest NUR quellen_mit_fehler (pro Lauf vom Worker gemeldet),
     # NICHT das globale _QUELLEN_FEHLER (verwaiste Threads können es verfälschen).
+    # M1/F15 (OpenCode-6-10): err_lokal (Fehler + Teiltreffer) → ok=False —
+    # vorher verschwand der Fehler, sobald Treffer da waren (konstant
+    # halbkaputte Quelle blieb HEALTHY).
     if _reg is not None:
         try:
             # F2 (Codex-Gesamt): NUR abgeschlossene Quellen committen. Quellen,
@@ -749,9 +773,12 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
             # vorher wurden sie fälschlich als HEALTHY verbucht (Timeout als
             # Gesundheit kaschiert, unterlief Cooldown/Selbstheilung).
             for name in quellen_abgeschlossen:
-                hat_fehler = name in quellen_mit_fehler
-                fehlertext = quellen_mit_fehler.get(name, "")
-                if hat_fehler and name not in quellen_mit_treffern:
+                # M1/P4-Semantik: Fehler zählt NUR wenn die Quelle KEINE reine
+                # ok-Variante hatte (P4: Query-Expansion — 1 ok-Variante von 3
+                # heißt Quelle gesund; M1: NUR err_lokal mit Teiltreffern = die
+                # Quelle meldet selbst Fehler → ok=False, nicht HEALTHY).
+                if name in quellen_mit_fehler and name not in quellen_ok:
+                    fehlertext = quellen_mit_fehler.get(name, "")
                     _reg.record_outcome(name, ok=False, error=fehlertext)
                 else:
                     _reg.record_outcome(name, ok=True)

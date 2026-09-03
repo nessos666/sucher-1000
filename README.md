@@ -6,14 +6,18 @@
 > sich, welche Quelle krank ist, und überspringt sie 60 Minuten lang
 > (Selbstheilung).
 >
-> Hinweis: Die Zahl `n` ist **pro Quelle** — bei 10 Web-Quellen liefert
-> `sucher.py "…" 3 --modus web` bis zu ~30 Treffer (dedupliziert). Wer
+> Hinweis: Die Zahl `n` ist **pro Quelle** — bei 24 Web-Quellen liefert
+> `sucher.py "…" 3 --modus web` bis zu ~72 Treffer (dedupliziert). Wer
 > wenige Treffer will, nimmt kleinere `n` oder `--quelle <name>`.
 
-Web-Suche (**10 Quellen**: ddgs, Bing, Mojeek, Wikipedia DE+EN, HackerNews,
-Google News, Bing News — alle key-frei; + optionale Tavily/Exa/SerpApi)
+Web-Suche (**24 Quellen**: ddgs, Bing, Mojeek, Wikipedia, HackerNews,
+Google News, Bing News, StackExchange, Wikiquote/Wikinews/Wikisource,
+OpenLibrary, Internet Archive, GitHub, HuggingFace, Google Patents, YouTube,
+Google Scholar, Google Autosuggest — key-frei; + Tavily/Exa/SerpApi/Reddit/
+KnowledgeGraph/GoogleBooks als Key-optional)
 **und** wissenschaftliche Suche (OpenAlex, PubMed, arXiv, Crossref, DOAJ,
-EuropePMC, SemanticScholar, Wikidata) in **einem** Befehl.
+EuropePMC, SemanticScholar, Zenodo, DataCite, DBLP, OpenAIRE, ClinicalTrials,
+OpenReview, OSF, CORE, DOAB + Wikipedia/Wikidata) in **einem** Befehl.
 
 ---
 
@@ -74,7 +78,7 @@ aktivierst du mit Keys — siehe `.env.example`. Fehlt ein Key, wird die Quelle
 
 ## 🩺 Qualität
 
-- **121 automatisierte Tests** (Netz gemockt — offline reproduzierbar)
+- **180 automatisierte Tests** (Netz gemockt — offline reproduzierbar)
 - Profi-Quality-Gate: `./check.sh` → Syntax + mypy + ruff + bandit + pytest
 - Von 2 unabhängigen KI-Reviewern auditiert (Codex + OpenCode), alle Findings behoben
 - Jeder Block einzeln committet — saubere, nachvollziehbare Historie
@@ -87,13 +91,13 @@ launch.sh               ← Menü-Launcher
 check.sh                ← Quality-Gate (1 Befehl)
 src/
   sucher_universal.py   ← 10 akademische Quellen + Parallel-Fanout
-  sucher_web.py         ← Web-Bündel (10 Quellen) + Fallbacks
+  sucher_web.py         ← Web-Bündel (24 Quellen) + Fallbacks
   net.py                ← Gehärteter Transport (8s, Retry, Botwall-Erkennung)
   health.py             ← Health-Registry + Cooldown
   cache.py              ← TTL-Such-Cache
   ratelimit.py          ← Pro-Quellen-Drosselung
   store.py              ← SQLite-Archiv
-tests/                  ← 19 Test-Dateien, 121 Tests
+tests/                  ← 23 Test-Dateien, 180 Tests
 docs/                   ← Pläne + Reviews + Audits
 wissen/                 ← Recherche-Wissen (Quellen, Marktlage, Pitfalls)
 ```

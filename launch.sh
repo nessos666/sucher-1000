@@ -24,7 +24,7 @@ fi
 
 echo "╔══════════════════════════════════════════╗"
 echo "║        SUCHER-1000 — Multi-Engine         ║"
-echo "║  Web-Bündel + 12 Studien-Quellen          ║"
+echo "║  Web-Bündel + 16 Studien-Quellen          ║"
 echo "╚══════════════════════════════════════════╝"
 echo
 

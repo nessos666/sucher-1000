@@ -104,6 +104,15 @@ def block_indicator(body, erwartet="json"):
         return None  # parsebarer Feed — kein Block
     m = _BLOCK_MARKER.search(probe)
     if m:
+        # M2 (OpenCode-6-10): Für Text/HTML dürfen Marker NICHT body-weit killen.
+        # Echte Ergebnisseiten (Scholar/DDG/Mojeek) enthalten Marker-Wörter in
+        # Titeln/Snippets ("Anomaly detection in …"). Botwalls sind KOMPAKT mit
+        # kaum Links. Gegenprüfung: viele externe Links = echte Inhaltsseite.
+        if erwartet == "text":
+            full = probe_text[:50000]
+            ext_links = len(re.findall(r'href="https?://', full))
+            if ext_links >= 5:
+                return None  # echte Ergebnisseite — Marker ist Query-Echo
         return f"BLOCK: '{m.group(0)}'"
     return None
 
