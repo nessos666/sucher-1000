@@ -50,19 +50,26 @@ _WEB_FEHLER: dict = {}
 _WEB_FEHLER_LOCK = threading.Lock()
 
 def _env(name):
-    """Key aus Env lesen (auch ~/.hermes/.env als Fallback, wenn vorhanden)."""
+    """Key aus Env lesen (auch ~/.hermes/.env + ~/.config/sucher1000/keys.env).
+
+    keys.env wird vom Auth-Wizard (sucher_auth.py) geschrieben — so greifen
+    dort gesetzte Keys bei jeder Suche automatisch.
+    """
     v = os.environ.get(name, "")
     if not v:
-        try:
-            p = os.path.expanduser("~/.hermes/.env")
-            if os.path.exists(p):
-                with open(p, encoding="utf-8") as f:
-                    for line in f:
-                        if line.startswith(name + "="):
-                            v = line.strip().split("=", 1)[1]
-                            break
-        except Exception:  # noqa: S110 - bewusster Fallback (optional)
-            pass
+        for p in (os.path.expanduser("~/.hermes/.env"),
+                  os.path.expanduser("~/.config/sucher1000/keys.env")):
+            try:
+                if os.path.exists(p):
+                    with open(p, encoding="utf-8") as f:
+                        for line in f:
+                            if line.startswith(name + "="):
+                                v = line.strip().split("=", 1)[1]
+                                break
+            except Exception:  # noqa: S110 - bewusster Fallback (optional)
+                pass
+            if v:
+                break
     return (v or "").strip()
 
 def _web_fehler_count(name):
@@ -1086,10 +1093,79 @@ def q_youtube(query, n=8):
     return out
 
 
+def q_serper(query, n=8):
+    """Serper.dev (Google-SERP), Key-optional — 2.500 Credits gratis, $1/1k.
+
+    Live verifiziert 03.09.2026: POST google.serper.dev/search → 403 ohne Key
+    (= Endpoint lebt). Key: SERPER_API_KEY (serper.dev/api-key, karte-frei).
+    """
+    key = _env("SERPER_API_KEY")
+    if not key:
+        print("  ⚠ [serper] übersprungen (kein SERPER_API_KEY — kostenlos: "
+              "https://serper.dev/api-key, 2.500 Gratis-Requests)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("serper", "net fehlt")
+        return []
+    out = []
+    j = net.post_json("https://google.serper.dev/search",
+                      {"q": query, "num": n}, timeout=12,
+                      headers={"X-API-KEY": key})
+    if "_error" in j:
+        _log_web_error("serper", j["_error"])
+        return []
+    for r in j.get("organic", [])[:n]:
+        title = r.get("title") or ""
+        if not title:
+            continue
+        out.append({"title": title, "year": None, "venue": "Google SERP",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "Serper", "url": r.get("link"),
+                    "snippet": (r.get("snippet") or "")[:200]})
+    return out
+
+
+def q_youcom(query, n=8):
+    """You.com Web-Search (Web+News), Key-optional — 100 Queries/Tag dauerhaft.
+
+    Live verifiziert 03.09.2026: POST api.you.com/v1/search → 401 ohne Key.
+    Key: YOUCOM_API_KEY (you.com/platform, karte-frei, $100 Startguthaben).
+    """
+    key = _env("YOUCOM_API_KEY")
+    if not key:
+        print("  ⚠ [youcom] übersprungen (kein YOUCOM_API_KEY — kostenlos: "
+              "https://you.com/platform, 100 Suchen/Tag dauerhaft)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("youcom", "net fehlt")
+        return []
+    out = []
+    j = net.post_json("https://api.you.com/v1/search",
+                      {"q": query, "num_web_results": n}, timeout=12,
+                      headers={"x-api-key": key})
+    if "_error" in j:
+        _log_web_error("youcom", j["_error"])
+        return []
+    for r in (j.get("web", {}) or {}).get("results", [])[:n]:
+        title = r.get("title") or ""
+        if not title:
+            continue
+        out.append({"title": title, "year": None, "venue": "You.com",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "You.com", "url": r.get("url"),
+                    "snippet": (r.get("description") or "")[:200]})
+    return out
+
+
 KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
                    "serpapi": "SERPAPI_API_KEY", "reddit": "REDDIT_CLIENT_ID",
                    "knowledgegraph": "GOOGLE_KG_API_KEY",
-                   "google_books": "GOOGLE_BOOKS_API_KEY"}
+                   "google_books": "GOOGLE_BOOKS_API_KEY",
+                   "serper": "SERPER_API_KEY", "youcom": "YOUCOM_API_KEY"}
 
 # ---------- Register ----------
 WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
@@ -1101,7 +1177,8 @@ WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
        "patents": q_patents, "reddit": q_reddit,
        "youtube": q_youtube, "google_scholar": q_google_scholar,
        "autosuggest": q_autosuggest, "knowledgegraph": q_knowledgegraph,
-       "google_books": q_google_books}  # Block 7-10 (Agenten-Runden 2+3)
+       "google_books": q_google_books, "serper": q_serper,
+       "youcom": q_youcom}  # Block 7-11
 
 # P6-B3: Web-Quellen-Gewichte (für deterministische Sortierung — nicht
 # completion-order der Threads). Bing hinten: Junk-Problem (Juli-Audit ⭐⭐).
@@ -1114,7 +1191,8 @@ _WEB_WEIGHT = {"ddgs": 1.0, "mojeek": 1.0, "wikipedia": 0.9, "tavily": 0.8,
                "wikis": 0.7, "openlibrary": 0.7, "archive": 0.7, "github": 0.9,
                "huggingface": 0.95, "googlepatents": 0.7, "reddit": 0.75,
                "youtube": 0.8, "scholar": 0.95, "googlesuggest": 0.3,
-               "knowledgegraph": 0.85, "googlebooks": 0.7}
+               "knowledgegraph": 0.85, "googlebooks": 0.7, "serper": 0.9,
+               "you.com": 0.8}
 
 
 def _web_score_sort(results):
