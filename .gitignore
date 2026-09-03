@@ -4,6 +4,9 @@ __pycache__/
 data/
 logs/
 sucher_ergebnisse/
+ergebnisse/
 *.log
 .pytest_cache/
 .coverage
+sucher_cache.db
+health.json
