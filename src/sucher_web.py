@@ -650,9 +650,205 @@ def q_github(query, n=8):
     return out
 
 
-# Key-Quellen → Env-Variablen (für NO_KEY-Handling)
+# ---------- Block 8: HuggingFace / Google Patents / Reddit-OAuth ----------
+def q_huggingface(query, n=8):
+    """HuggingFace Models+Datasets (ML-Models, key-frei JSON).
+
+    Live verifiziert 03.09.2026: api/models?search=… HTTP 200. Kombiniert
+    Models UND Datasets in einer Engine (David-Anforderung).
+    """
+    try:
+        import net
+    except ImportError:
+        _log_web_error("huggingface", "net fehlt")
+        return []
+    out = []
+    for korpus, label in (("models", "HF Model"), ("datasets", "HF Dataset")):
+        url = f"https://huggingface.co/api/{korpus}?" + urllib.parse.urlencode(
+            {"search": query, "limit": max(1, n // 2 + 1)})
+        j = net.get_json(url, timeout=12)
+        if "_error" in j:
+            _log_web_error("huggingface", f"{korpus}: {j['_error']}")
+            continue
+        if not isinstance(j, list):
+            continue
+        for m in j:
+            mid = m.get("id") or ""
+            if not mid:
+                continue
+            dl = m.get("downloads") or 0
+            likes = m.get("likes") or 0
+            snip = f"⬇ {dl:,} · ♥ {likes}".replace(",", ".")
+            if m.get("pipeline_tag"):
+                snip += f" · {m['pipeline_tag']}"
+            out.append({"title": mid, "year": None, "venue": label,
+                        "is_oa": True, "pdf": None, "doi": None,
+                        "source": "HuggingFace",
+                        "url": f"https://huggingface.co/{mid}",
+                        "snippet": snip})
+            if len(out) >= n:
+                break
+    return out[:n]
+
+
+def q_patents(query, n=8):
+    """Google Patents über die XHR-JSON-API (key-frei, Google-Kleinod).
+
+    Live verifiziert 03.09.2026: HTTP 200 + 124k Treffer für 'linux'. ABER:
+    Google blockt bei mehreren Anfragen (503 "automated queries") — wie bei
+    Mojeek/DDG. Health-Cooldown fängt das ab (Quelle pausiert, andere liefern).
+    """
+    import html as _html
+    try:
+        import net
+    except ImportError:
+        _log_web_error("patents", "net fehlt")
+        return []
+    out = []
+    url = ("https://patents.google.com/xhr/query?url="
+           + urllib.parse.quote(f"q={query}", safe="") + "&exp=")
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("patents", j["_error"])
+        return []
+    try:
+        cluster = j["results"]["cluster"]
+    except (KeyError, TypeError):
+        return []
+    count = 0
+    for c in cluster:
+        for r in (c.get("result") or []):
+            p = r.get("patent") or {}
+            title = p.get("title") or ""
+            if not title:
+                continue
+            pid = r.get("id") or ""
+            # id ist z. B. "patent/US9324234B2/en" — daraus die URL bauen,
+            # ohne "patent/patent" oder "/en/en" zu duplizieren
+            pid_clean = pid
+            if pid_clean.startswith("patent/"):
+                pid_clean = pid_clean[len("patent/"):]
+            pid_clean = pid_clean.rstrip("/").removesuffix("/en")
+            pid_clean = pid_clean.removesuffix("/en")
+            year = None
+            pd = p.get("publication_date") or p.get("grant_date") or ""
+            if len(pd) >= 4 and pd[:4].isdigit():
+                year = int(pd[:4])
+            snip_bits = []
+            if p.get("assignee"):
+                snip_bits.append(str(p["assignee"]))
+            if p.get("inventor"):
+                snip_bits.append(str(p["inventor"]))
+            out.append({"title": _html.unescape(title).strip(), "year": year,
+                        "venue": "Google Patents", "is_oa": True, "pdf": None,
+                        "doi": None, "source": "GooglePatents",
+                        "url": f"https://patents.google.com/patent/{pid_clean}/en"
+                               if pid_clean else None,
+                        "snippet": " · ".join(snip_bits)[:150]})
+            count += 1
+            if count >= n:
+                break
+        if count >= n:
+            break
+    return out
+
+
+def _reddit_token():
+    """Reddit-OAuth-Token (client_credentials) holen — form-encoded + Basic.
+
+    Respektiert net._transport (Test-Hook); ohne _transport echter Request.
+    Gibt Token-String oder None (Fehler wird geloggt).
+    """
+    import base64
+    import json as _json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    try:
+        import net
+    except ImportError:
+        return None
+    cid = _env("REDDIT_CLIENT_ID")
+    csec = _env("REDDIT_CLIENT_SECRET")
+    if not cid or not csec:
+        print("  ⚠ [reddit] übersprungen (kein REDDIT_CLIENT_ID/SECRET in Env — "
+              "kostenlose App: reddit.com/prefs/apps)", file=sys.stderr)
+        return None
+    auth = base64.b64encode(f"{cid}:{csec}".encode()).decode()
+    body = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode()
+    token_url = "https://www.reddit.com/api/v1/access_token"
+    try:
+        if net._transport is not None:  # Test-Hook
+            raw = net._decode_body(net._transport.open(token_url, timeout=10))
+        else:
+            req = urllib.request.Request(
+                token_url, data=body,
+                headers={"User-Agent": UA["User-Agent"],
+                         "Authorization": f"Basic {auth}",
+                         "Content-Type": "application/x-www-form-urlencoded"})
+            with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310
+                raw = r.read()
+        j = _json.loads(raw.decode("utf-8", "replace"))
+        tok = j.get("access_token")
+        if not tok:
+            _log_web_error("reddit", f"Token-Fehler: {str(j)[:80]}")
+            return None
+        return tok
+    except Exception as e:
+        _log_web_error("reddit", f"Token: {e}")
+        return None
+
+
+def q_reddit(query, n=8):
+    """Reddit-Suche über die OFFIZIELLE OAuth-Data-API (Key-optional).
+
+    Seit 2026 blockt der .json-Endpoint von Server-IPs (403) — offizieller
+    Weg: kostenlose App-Registrierung (reddit.com/prefs/apps) → 100 QPM free.
+    Keys: REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET in Env.
+    """
+    import html as _html
+    try:
+        import net
+    except ImportError:
+        _log_web_error("reddit", "net fehlt")
+        return []
+    tok = _reddit_token()
+    if not tok:
+        return []
+    out = []
+    url = "https://oauth.reddit.com/search?" + urllib.parse.urlencode(
+        {"q": query, "limit": n, "sort": "relevance", "type": "link"})
+    j = net.get_json(url, timeout=12, headers={
+        "Authorization": f"Bearer {tok}", "User-Agent": UA["User-Agent"]})
+    if "_error" in j:
+        _log_web_error("reddit", j["_error"])
+        return []
+    try:
+        children = j["data"]["children"]
+    except (KeyError, TypeError):
+        return []
+    for ch in children[:n]:
+        d = ch.get("data") or {}
+        title = d.get("title") or ""
+        if not title:
+            continue
+        perm = d.get("permalink") or ""
+        link = f"https://www.reddit.com{perm}" if perm else d.get("url")
+        import datetime as _dt
+        year = None
+        try:
+            year = _dt.datetime.fromtimestamp(
+                d.get("created_utc") or 0).year
+        except (OverflowError, OSError, ValueError):
+            pass
+        snip = f"r/{d.get('subreddit')} · Score {d.get('score')}"
+        out.append({"title": _html.unescape(title), "year": year,
+                    "venue": "Reddit", "is_oa": True, "pdf": None,
+                    "doi": None, "source": "Reddit",
+                    "url": link, "snippet": snip})
+    return out
 KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
-                   "serpapi": "SERPAPI_API_KEY"}
+                   "serpapi": "SERPAPI_API_KEY", "reddit": "REDDIT_CLIENT_ID"}
 
 # ---------- Register ----------
 WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
@@ -660,16 +856,19 @@ WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
        "serpapi": q_serpapi, "hn": q_hn, "google_news": q_google_news,
        "bing_news": q_bing_news, "stackexchange": q_stackexchange,
        "wikis": q_wikis, "openlibrary": q_openlibrary, "archive": q_archive,
-       "github": q_github}   # Block 7 (Agenten-Runde 2, live geprüft 03.09.2026)
+       "github": q_github, "huggingface": q_huggingface,
+       "patents": q_patents, "reddit": q_reddit}  # Block 7+8 (Agenten-Runde 2)
 
 # P6-B3: Web-Quellen-Gewichte (für deterministische Sortierung — nicht
 # completion-order der Threads). Bing hinten: Junk-Problem (Juli-Audit ⭐⭐).
 # Block 5: HackerNews hoch (relevante Tech-Treffer), News-Feeds mittel.
 # Block 7: StackExchange/GitHub hoch (Community-Qualität), Archive/Bücher mittel.
+# Block 8: HuggingFace hoch (ML), Google Patents mittel, Reddit mittel.
 _WEB_WEIGHT = {"ddgs": 1.0, "mojeek": 1.0, "wikipedia": 0.9, "tavily": 0.8,
                "exa": 0.8, "serpapi": 0.9, "bing": 0.4, "hackernews": 0.95,
                "googlenews": 0.7, "bingnews": 0.5, "stackexchange": 0.95,
-               "wikis": 0.7, "openlibrary": 0.7, "archive": 0.7, "github": 0.9}
+               "wikis": 0.7, "openlibrary": 0.7, "archive": 0.7, "github": 0.9,
+               "huggingface": 0.95, "googlepatents": 0.7, "reddit": 0.75}
 
 
 def _web_score_sort(results):

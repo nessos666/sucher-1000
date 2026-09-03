@@ -45,16 +45,22 @@ _BLOCK_MARKER = re.compile(
 _transport = None
 
 
-def _open(url: str, timeout: int = TIMEOUT_S):
+def _open(url: str, timeout: int = TIMEOUT_S, headers=None):
     """Echter Öffner ODER FakeTransport (wenn Test-Hook gesetzt).
 
     WICHTIG: gibt die Bytes zurück (nicht die Response) — die Response wird
     im with-Block geschlossen; wer sie nach außen gibt, liest 0 Bytes.
     FakeTransport liefert (status, body)-Tupel — _decode_body behandelt beide.
+    headers optional (z. B. Reddit-Bearer); Default = Standard-UA.
     """
+    hdr = headers if headers is not None else UA
     if _transport is not None:
+        # headers nur durchreichen, wenn explizit gesetzt — ältere
+        # FakeTransports (P2-Tests) haben kein headers-kwarg (Rückwärtskompat.)
+        if headers is not None:
+            return _transport.open(url, timeout=timeout, headers=hdr)
         return _transport.open(url, timeout=timeout)
-    req = urllib.request.Request(url, headers=UA)
+    req = urllib.request.Request(url, headers=hdr)
     with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310 — nur feste https-API-Endpunkte
         return r.read()
 
@@ -119,17 +125,19 @@ def _decode_body(resp) -> bytes:
 
 # ---------- Öffentliche API (kompatibel zu http_json) ----------
 
-def get_json(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
+def get_json(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True,
+             headers=None):
     """JSON laden mit Format-Validierung + Retry. Rückgabe: dict/list ODER {"_error": ...}.
 
     Vertrag (F6/OpenCode): garantiert dict ODER list. Gültige JSON-Skalare
     (true/123/"ok") sind zwar kein Block (F7/Codex), aber für Such-APIs nutzlos
     → werden als _error zurückgegeben, damit keine q_*-Funktion crasht.
+    headers optional (z. B. Reddit-Bearer) — Default = Standard-UA.
     """
     last = None
     for i in range(retries + 1):
         try:
-            body = _decode_body(_open(url, timeout=timeout))
+            body = _decode_body(_open(url, timeout=timeout, headers=headers))
             grund = block_indicator(body, erwartet="json")
             if grund:
                 last = grund
