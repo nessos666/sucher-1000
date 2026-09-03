@@ -55,6 +55,22 @@ def fake_transport():
     return FakeTransport()
 
 
+@pytest.fixture(autouse=True)
+def health_auf_tmp(tmp_path, monkeypatch):
+    """P4: JEDER Test leitet die Health-Datei auf tmp um.
+
+    search() erstellt HealthRegistry() mit DEFAULT_HEALTH_FILE — ohne diese
+    Umleitung schrieben Fake-Quellen aus Tests in die echte data/health.json.
+    """
+    import sys
+    src = str(Path(__file__).resolve().parents[1] / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    import health
+    monkeypatch.setattr(health, "DEFAULT_HEALTH_FILE", tmp_path / "health_test.json")
+    yield
+
+
 @pytest.fixture
 def unique_db_path(tmp_path):
     """Eindeutiger SQLite-Pfad je Test (Skill-Pitfall #13/#20)."""

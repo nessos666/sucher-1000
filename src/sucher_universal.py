@@ -360,7 +360,26 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     seen, results = set(), []
     budget_ueberschritten = False
     t_start = _time.monotonic()
-    tasks = [(name, fn, qy) for qy in queries for name, fn in active.items()]
+
+    # P4: Health-Registry — BROKEN/NO_KEY-Quellen überspringen statt ertragen
+    try:
+        import health as _health
+        _reg = _health.HealthRegistry()
+    except Exception:
+        _reg = None
+    _übersprungen = []
+    tasks = []
+    for qy in queries:
+        for name, fn in active.items():
+            if _reg is not None:
+                skip, grund = _reg.is_skippable(name)
+                if skip:
+                    _übersprungen.append((name, grund))
+                    continue
+            tasks.append((name, fn, qy))
+    if _übersprungen:
+        for name, grund in _übersprungen:
+            print(f"  ⏭ [{name}] übersprungen: {grund}", file=sys.stderr)
     if not tasks:
         return []
 
@@ -387,11 +406,15 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
             name, status, payload = ergebnis_q.get(timeout=0.2)
             offen -= 1
             if status == "ok":
+                if _reg is not None:
+                    _reg.record_outcome(name, ok=True, latency_ms=0)
                 for it in payload:
                     key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
                     if key and key not in seen:
                         seen.add(key); results.append(it)
             else:
+                if _reg is not None:
+                    _reg.record_outcome(name, ok=False, error=str(payload))
                 _log_quellenfehler(name, payload)
         except _queue.Empty:
             continue  # noch keine Antwort — weiter auf Budget warten
@@ -399,6 +422,11 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     if offen > 0:
         budget_ueberschritten = True
         # Verwaiste Threads NICHT joinen — daemon, sterben mit Prozess (F1)
+    if _reg is not None:
+        try:
+            _reg.save()
+        except Exception:
+            pass
     # --- Filter: min_year ---
     if min_year:
         results = [r for r in results if _ok_year(r.get("year"), min_year)]
