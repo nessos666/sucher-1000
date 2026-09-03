@@ -62,6 +62,7 @@ def main():
                     help="Anzahl PRO QUELLE (default 8) — bei 24 Web-Quellen "
                          "also bis zu ~192 Treffer; kleiner wählen für wenige")
     ap.add_argument("--modus", default="universal", help="studien|universal|alle|web")
+    ap.add_argument("--quelle", default=None, help="Nur EINE Quelle (z. B. pubmed, arxiv, ddgs, github)")
     ap.add_argument("--out", default=DEFAULT_OUT, help="Zielordner")
     ap.add_argument("--download", action="store_true", help="Automatisch frei ladbare herunterladen")
     ap.add_argument("--setup", action="store_true", help="Umgebung prüfen")
@@ -156,9 +157,11 @@ def _suche(args):
         ergebnisse = {}
         def _studien():
             ergebnisse["studien"] = su.search(args.query, args.n, mode="universal",
+                                              only=args.quelle,
                                               health_reg=gemeinsame_reg)
         def _web():
             ergebnisse["web"] = sw.search_web(args.query, args.n,
+                                              only=args.quelle,
                                               health_reg=gemeinsame_reg)
         t1 = threading.Thread(target=_studien, daemon=True); t1.start()
         t2 = threading.Thread(target=_web, daemon=True); t2.start()
@@ -177,9 +180,9 @@ def _suche(args):
         results = dedup
     elif args.modus == "web":
         # Web-Bündel: mehrere Web-Such-Quellen parallel (sucher_web)
-        results = sw.search_web(args.query, args.n)
+        results = sw.search_web(args.query, args.n, only=args.quelle)
     else:
-        results = su.search(args.query, args.n, mode=args.modus)
+        results = su.search(args.query, args.n, mode=args.modus, only=args.quelle)
     if not results:
         print("  Keine Treffer — Netzwerk/Quellen gerade evtl. instabil (560/429).")
         log("Suche: 0 Treffer (Quellen evtl. down)", "WARN")

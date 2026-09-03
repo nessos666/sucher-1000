@@ -96,19 +96,23 @@ geschrieben, chmod 600). Fehlt ein Key, wird die Quelle übersprungen
 ## 📁 Projektstruktur
 
 ```
-sucher.py               ← CLI-Einstieg
+setup.sh                ← All-in-one-Installation (venv + sucher-Starter)
+sucher.py               ← CLI-Einstieg (Begrüßung + interaktiver Assistent)
 launch.sh               ← Menü-Launcher
-check.sh                ← Quality-Gate (1 Befehl)
+check.sh                ← Quality-Gate (Syntax+mypy+ruff+bandit+pytest)
+scripts/
+  sucher_auth.py        ← API-Key-Assistent (verdeckte Eingabe + Live-Test)
+  health_check.py       ← Quellen-Health-Check (parallel)
 src/
-  sucher_universal.py   ← 10 akademische Quellen + Parallel-Fanout
-  sucher_web.py         ← Web-Bündel (24 Quellen) + Fallbacks
+  sucher_universal.py   ← 16 akademische Quellen + Parallel-Fanout
+  sucher_web.py         ← Web-Bündel (26 Quellen) + Fallbacks
   net.py                ← Gehärteter Transport (8s, Retry, Botwall-Erkennung)
   health.py             ← Health-Registry + Cooldown
   cache.py              ← TTL-Such-Cache
   ratelimit.py          ← Pro-Quellen-Drosselung
   store.py              ← SQLite-Archiv
-tests/                  ← 23 Test-Dateien, 180 Tests
-docs/                   ← Pläne + Reviews + Audits
+tests/                  ← 29 Test-Dateien, 192 Tests
+docs/                   ← Pläne + Reviews (Codex/OpenCode) + Audits
 wissen/                 ← Recherche-Wissen (Quellen, Marktlage, Pitfalls)
 ```
 
