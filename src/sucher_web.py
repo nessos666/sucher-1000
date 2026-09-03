@@ -847,6 +847,61 @@ def q_reddit(query, n=8):
                     "doi": None, "source": "Reddit",
                     "url": link, "snippet": snip})
     return out
+def q_youtube(query, n=8):
+    """YouTube-Suche via InnerTube (Google-Kleinod, key-frei).
+
+    Live verifiziert 03.09.2026: youtubei/v1/search HTTP 200, 20 Treffer.
+    Inoffiziell (kein SLA) — Serienabrufe → 429/leer; Health-Cooldown hilft.
+    Public-Web-Key wird von youtube.com mitgeliefert (stabil).
+    """
+    try:
+        import net
+    except ImportError:
+        _log_web_error("youtube", "net fehlt")
+        return []
+    url = ("https://www.youtube.com/youtubei/v1/search?key="
+           "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8")
+    body = {"context": {"client": {"clientName": "WEB",
+                                   "clientVersion": "2.20240101.00.00"}},
+            "query": query}
+    j = net.post_json(url, body, timeout=12)
+    if "_error" in j:
+        _log_web_error("youtube", j["_error"])
+        return []
+    out = []
+    try:
+        contents = j["contents"]["twoColumnSearchResultsRenderer"][
+            "primaryContents"]["sectionListRenderer"]["contents"]
+    except (KeyError, TypeError):
+        return []
+    for sec in contents:
+        try:
+            items = sec["itemSectionRenderer"]["contents"]
+        except (KeyError, TypeError):
+            continue
+        for it in items:
+            vr = it.get("videoRenderer")
+            if not vr:
+                continue
+            vid = vr.get("videoId") or ""
+            runs = (vr.get("title") or {}).get("runs") or []
+            title = runs[0].get("text", "") if runs else ""
+            if not title or not vid:
+                continue
+            owner = (vr.get("ownerText") or {}).get("runs") or []
+            channel = owner[0].get("text", "") if owner else ""
+            length = (vr.get("lengthText") or {}).get("simpleText") or ""
+            snip = " · ".join(x for x in (length, channel) if x)
+            out.append({"title": title, "year": None, "venue": "YouTube",
+                        "is_oa": True, "pdf": None, "doi": None,
+                        "source": "YouTube",
+                        "url": f"https://www.youtube.com/watch?v={vid}",
+                        "snippet": snip})
+            if len(out) >= n:
+                return out
+    return out
+
+
 KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
                    "serpapi": "SERPAPI_API_KEY", "reddit": "REDDIT_CLIENT_ID"}
 
@@ -857,7 +912,8 @@ WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
        "bing_news": q_bing_news, "stackexchange": q_stackexchange,
        "wikis": q_wikis, "openlibrary": q_openlibrary, "archive": q_archive,
        "github": q_github, "huggingface": q_huggingface,
-       "patents": q_patents, "reddit": q_reddit}  # Block 7+8 (Agenten-Runde 2)
+       "patents": q_patents, "reddit": q_reddit,
+       "youtube": q_youtube}  # Block 7+8+9 (Agenten-Runden 2+3)
 
 # P6-B3: Web-Quellen-Gewichte (für deterministische Sortierung — nicht
 # completion-order der Threads). Bing hinten: Junk-Problem (Juli-Audit ⭐⭐).
@@ -868,7 +924,8 @@ _WEB_WEIGHT = {"ddgs": 1.0, "mojeek": 1.0, "wikipedia": 0.9, "tavily": 0.8,
                "exa": 0.8, "serpapi": 0.9, "bing": 0.4, "hackernews": 0.95,
                "googlenews": 0.7, "bingnews": 0.5, "stackexchange": 0.95,
                "wikis": 0.7, "openlibrary": 0.7, "archive": 0.7, "github": 0.9,
-               "huggingface": 0.95, "googlepatents": 0.7, "reddit": 0.75}
+               "huggingface": 0.95, "googlepatents": 0.7, "reddit": 0.75,
+               "youtube": 0.8}
 
 
 def _web_score_sort(results):

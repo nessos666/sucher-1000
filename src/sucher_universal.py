@@ -383,6 +383,126 @@ def q_openaire(query, n=8):
     return out
 
 
+# ---------- Block 9: ClinicalTrials / OpenReview / OSF / CORE (Agenten-Runde 3) ----------
+def q_clinicaltrials(query, n=8):
+    """ClinicalTrials.gov v2 — klinische Studien weltweit, key-frei JSON.
+
+    Live verifiziert 03.09.2026 (Agent-2). Für Davids Themen (PTBS, Trauma):
+    NCT-IDs + Volltext-Protokoll. Status (RECRUITING etc.) im Snippet.
+    """
+    url = "https://clinicaltrials.gov/api/v2/studies?" + urllib.parse.urlencode(
+        {"query.term": query, "pageSize": n})
+    j = http_json(url)
+    if _check_fehler("clinicaltrials", j): return []
+    out = []
+    for s in j.get("studies", [])[:n]:
+        ps = s.get("protocolSection", {})
+        ident = ps.get("identificationModule", {})
+        title = ident.get("briefTitle") or ""
+        nct = ident.get("nctId") or ""
+        if not title or not nct:
+            continue
+        status = (ps.get("statusModule", {}) or {}).get("overallStatus") or ""
+        cond = (ps.get("conditionsModule", {}) or {}).get("conditions") or []
+        snip = " · ".join(x for x in [status, ", ".join(cond[:3])] if x)
+        out.append({"title": title, "year": None, "venue": "ClinicalTrials",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "ClinicalTrials",
+                    "url": f"https://clinicaltrials.gov/study/{nct}",
+                    "snippet": snip, "cites": 0, "relevance": 0})
+    return out
+
+
+def q_openreview(query, n=8):
+    """OpenReview v1 — Konferenz-Papers/Preprints (ICLR/NeurIPS/ICML), key-frei.
+
+    Live verifiziert 03.09.2026. v2 (api2) steht hinter 403-Challenge →
+    bewusst v1-Endpoint. cdate (ms-Epoch) → Jahr.
+    """
+    url = "https://api.openreview.net/notes/search?" + urllib.parse.urlencode(
+        {"term": query, "limit": n})
+    j = http_json(url)
+    if _check_fehler("openreview", j): return []
+    out = []
+    for note in j.get("notes", [])[:n]:
+        content = note.get("content") or {}
+        title = content.get("title") if isinstance(content, dict) else ""
+        if isinstance(title, dict):  # neuere API: {"value": ...}
+            title = title.get("value") or ""
+        if not title:
+            continue
+        year = None
+        try:
+            year = int(note.get("cdate") or 0) // 1000 // 31556952 + 1970
+            if not (1990 <= year <= 2035):
+                year = None
+        except (TypeError, ValueError):
+            year = None
+        nid = note.get("id") or ""
+        out.append({"title": title, "year": year, "venue": "OpenReview",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "OpenReview",
+                    "url": f"https://openreview.net/forum?id={nid}" if nid else None,
+                    "snippet": "", "cites": 0, "relevance": 0})
+    return out
+
+
+def q_osf(query, n=8):
+    """OSF Preprints (SocArXiv/PsyArXiv/engrXiv…), key-frei JSON:API.
+
+    Live verifiziert 03.09.2026: filter[title]=… HTTP 200.
+    """
+    url = "https://api.osf.io/v2/preprints/?" + urllib.parse.urlencode(
+        {"filter[title]": query, "page[size]": n})
+    j = http_json(url)
+    if _check_fehler("osf", j): return []
+    out = []
+    for d in j.get("data", [])[:n]:
+        a = d.get("attributes", {})
+        title = a.get("title") or ""
+        if not title:
+            continue
+        doi = a.get("doi")
+        links = d.get("links", {}) or {}
+        link = links.get("html")
+        if doi and not str(doi).startswith("http") and not link:
+            link = f"https://doi.org/{doi}"
+        out.append({"title": title, "year": None, "venue": "OSF Preprint",
+                    "is_oa": True, "pdf": None, "doi": doi,
+                    "source": "OSF", "url": link, "snippet": "",
+                    "cites": 0, "relevance": 0})
+    return out
+
+
+def q_core(query, n=8):
+    """CORE v3 — 30+ Mio OA-Dokumente (Repositorien-Aggregator), key-frei.
+
+    Live verifiziert 03.09.2026: anonym HTTP 200 (curl -L wegen 301 — net.py
+    folgt Redirects automatisch). Free-Key nur für höheres Quota.
+    """
+    url = "https://api.core.ac.uk/v3/search/works?" + urllib.parse.urlencode(
+        {"q": query, "limit": n})
+    j = http_json(url)
+    if _check_fehler("core", j): return []
+    out = []
+    for r in j.get("results", [])[:n]:
+        title = r.get("title") or ""
+        if not title:
+            continue
+        yr = r.get("yearPublished")
+        try:
+            yr = int(yr) if yr else None
+        except (TypeError, ValueError):
+            yr = None
+        doi = r.get("doi")
+        link = r.get("downloadUrl") or (f"https://doi.org/{doi}" if doi else None)
+        out.append({"title": title, "year": yr, "venue": "CORE",
+                    "is_oa": True, "pdf": r.get("downloadUrl"), "doi": doi,
+                    "source": "CORE", "url": link, "snippet": "",
+                    "cites": 0, "relevance": 0})
+    return out
+
+
 def q_lokal(query, n=10, zeitlimit_s=3):
     """LOKAL-SUCHE: durchsucht Davids HAUPTLAGER-Wissensbasis (Datei-NAMEN).
     Findet, was DAVID schon hat — vermeidet Doppelrecherche.
@@ -422,7 +542,9 @@ SCI = {"openalex": q_openalex, "crossref": q_crossref, "doaj": q_doaj,
        "arxiv": q_arxiv,
        "pubmed": q_pubmed,   # bioRxiv weggelassen: dessen API hat KEINE Freiwort-Suche (nur DOI/COVID) → leer
        "zenodo": q_zenodo, "datacite": q_datacite, "dblp": q_dblp,
-       "openaire": q_openaire}   # Block 6 (Agenten-Runde 2, live geprüft 03.09.2026)
+       "openaire": q_openaire,   # Block 6 (Agenten-Runde 2, live geprüft 03.09.2026)
+       "clinicaltrials": q_clinicaltrials, "openreview": q_openreview,
+       "osf": q_osf, "core": q_core}  # Block 9 (Agenten-Runde 3)
 GENERAL = {"wikipedia": q_wikipedia, "wikidata": q_wikidata, "lokal": q_lokal}
 
 def resolve_sources(mode):
@@ -661,6 +783,7 @@ def _score_sort(results):
     q_weight = {"OpenAlex":1.0, "EuropePMC":1.0, "Crossref":0.8, "DOAJ":0.8,
                 "PubMed":0.9, "arXiv":0.5, "SemanticScholar":0.8,
                 "Zenodo":0.7, "DataCite":0.7, "DBLP":0.8, "OpenAIRE":0.7,
+                "ClinicalTrials":0.8, "OpenReview":0.8, "OSF":0.6, "CORE":0.8,
                 "Wikipedia":0.3, "Wikidata":0.3, "Lokal":0.6}
     def score(r):
         cites = r.get("cites") or 0
