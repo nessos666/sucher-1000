@@ -9,7 +9,7 @@ Universelle Suche für JEDES Thema/Kontext. Mehrere Modi:
   --list           : verfügbare Quellen anzeigen
 Nutzung: python3 sucher_universal.py "suchbegriff" [anzahl] [--modus M] [--quelle Q]
 """
-import urllib.request, urllib.parse, json, time, sys, os, re
+import urllib.request, urllib.parse, json, time, sys, os, re, threading
 
 UA = {"User-Agent": "Sucher1000/ (mailto:kontakt@sucher1000.example)"}
 OUTDIR = "sucher_ergebnisse"
@@ -17,36 +17,53 @@ os.makedirs(OUTDIR, exist_ok=True)
 
 # ---------- Fehler-Sichtbarkeit (P1): nie still schlucken ----------
 _QUELLEN_FEHLER = {}   # quelle -> (letzter Fehler, anzahl)
+_QUELLEN_FEHLER_LOCK = threading.Lock()  # F5/OpenCode: atomarer Zugriff aus Threads
 
 def _log_quellenfehler(quelle, exc):
     """Quellen-Fehler sichtbar machen: sammeln + auf stderr ausgeben.
 
     Ersetzt stille `except: pass` — der Lauf läuft weiter, aber der Fehler
     ist dokumentiert und am Ende der Suche abrufbar (search() -> diagnostics).
+    Thread-sicher (Lock) — Worker-Threads schreiben aus Parallelität (F5).
     """
     msg = str(exc)[:120]
-    _QUELLEN_FEHLER[quelle] = (msg, _QUELLEN_FEHLER.get(quelle, (None, 0))[1] + 1)
+    with _QUELLEN_FEHLER_LOCK:
+        _QUELLEN_FEHLER[quelle] = (msg, _QUELLEN_FEHLER.get(quelle, (None, 0))[1] + 1)
     print(f"  ⚠ [{quelle}] Fehler: {msg}", file=sys.stderr)
 
 def _get_quellen_fehler():
     """Diagnose: welche Quellen sind fehlgeschlagen und warum."""
-    return {q: (m, n) for q, (m, n) in _QUELLEN_FEHLER.items() if n > 0}
+    with _QUELLEN_FEHLER_LOCK:
+        return {q: (m, n) for q, (m, n) in _QUELLEN_FEHLER.items() if n > 0}
 
-def http_json(url, timeout=25, retries=2):
+def _check_fehler(quelle, j):
+    """True wenn j ein _error-Dict ist — UND loggt den Fehler (F3/OpenCode).
+
+    Vorher: `if "_error" in j: return []` ohne Logging → Timeout/429 (die
+    häufigsten Fehler) erschienen nie im Register, pretty() meldete
+    fälschlich „keine Quellen-Fehler" obwohl Quellen tot waren.
+    """
+    if isinstance(j, dict) and j.get("_error"):
+        _log_quellenfehler(quelle, j["_error"])
+        return True
+    return False
+
+
+def http_json(url, timeout=8, retries=2):
     """Kompatibilitäts-Shim → net.get_json (P2: 8s-Timeout, Format-Validierung).
 
-    Der alte Default (25s) wird auf net.py's harten 8s reduziert, damit eine
-    langsame Quelle die Gesamtsuche nicht blockiert.
+    F9 (OpenCode): Default auf 8 korrigiert (war 25, wurde aber ohnehin hart
+    auf 8 reduziert) — kein Aufrufer geht mehr von einem falschen Timeout aus.
     """
     import net
-    return net.get_json(url, timeout=8, retries=retries)
+    return net.get_json(url, timeout=timeout, retries=retries)
 
 # ---------- Wissenschaftliche Quellen ----------
 def q_openalex(query, n=8):
     url = "https://api.openalex.org/works?" + urllib.parse.urlencode({
         "search": query, "per-page": n, "sort": "relevance_score:desc"})
     j = http_json(url)
-    if "_error" in j: return []
+    if _check_fehler("openalex", j): return []
     out=[]
     for w in j.get("results", []):
         oa = w.get("open_access") or {}
@@ -65,7 +82,7 @@ def q_crossref(query, n=8):
     url = "https://api.crossref.org/works?" + urllib.parse.urlencode(
         {"query": query, "rows": n, "select": "title,DOI,issued,container-title,URL"})
     j = http_json(url)
-    if "_error" in j: return []
+    if _check_fehler("crossref", j): return []
     out=[]
     for w in j.get("message", {}).get("items", []):
         # Robust: date-parts kann leer/verschachtelt sein → kein IndexError
@@ -84,7 +101,7 @@ def q_crossref(query, n=8):
 def q_doaj(query, n=8):
     url = "https://doaj.org/api/search/articles/" + urllib.parse.quote(query) + f"?pageSize={n}&page=1"
     j = http_json(url)
-    if "_error" in j: return []
+    if _check_fehler("doaj", j): return []
     out=[]
     for r in j.get("results", []):
         b=r.get("bibjson",{}); loc=r.get("bibjson",{}).get("link",[{}])
@@ -104,7 +121,7 @@ def q_europepmc(query, n=8):
     url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?" + urllib.parse.urlencode(
         {"query": query, "format":"json", "pageSize": n, "resultType":"core"})
     j = http_json(url)
-    if "_error" in j: return []
+    if _check_fehler("europepmc", j): return []
     out=[]
     for r in j.get("resultList",{}).get("result",[]):
         url_pdf=None
@@ -121,7 +138,7 @@ def q_semanticscholar(query, n=8):
     url = "https://api.semanticscholar.org/graph/v1/paper/search?" + urllib.parse.urlencode(
         {"query": query, "limit": n, "fields":"title,year,venue,openAccessPdf,externalIds,url"})
     j = http_json(url)
-    if "_error" in j or not j.get("data"): return []
+    if _check_fehler("semanticscholar", j) or not j.get("data"): return []
     out=[]
     for r in j["data"]:
         oa=r.get("openAccessPdf") or {}
@@ -138,7 +155,7 @@ def q_wikipedia(query, n=6):
         url = f"https://{lang}.wikipedia.org/w/api.php?" + urllib.parse.urlencode(
             {"action":"opensearch","search":query,"limit":n,"format":"json"})
         j = http_json(url)
-        if "_error" in j or not isinstance(j, list): continue
+        if _check_fehler("wikipedia", j) or not isinstance(j, list): continue
         titles = j[1] if len(j) > 1 else []
         descs  = j[2] if len(j) > 2 else []
         urls   = j[3] if len(j) > 3 else []
@@ -151,15 +168,18 @@ def q_wikipedia(query, n=6):
 
 # ---------- Preprint-Quellen (neu) ----------
 def q_arxiv(query, n=6):
-    """arXiv-API (Atom-Feed): Preprints Physik/ML/quantitativ."""
+    """arXiv-API (Atom-Feed): Preprints Physik/ML/quantitativ.
+
+    F2 (OpenCode): nutzt net.get_text (8s-Cap, Block-Erkennung, Proxy-Fallback)
+    statt direktem urlopen(timeout=30) — eine hängende arXiv-Antwort kann das
+    Gesamtbudget nicht mehr fressen.
+    """
+    import net as _net
     url = "https://export.arxiv.org/api/query?" + urllib.parse.urlencode(
         {"search_query": f"all:{query}", "max_results": n, "sortBy":"relevance"})
-    try:
-        req = urllib.request.Request(url, headers=UA)
-        with urllib.request.urlopen(req, timeout=30) as r:
-            xml = r.read().decode()
-    except Exception as e:
-        _log_quellenfehler("arxiv", e)
+    xml, err = _net.get_text(url)
+    if err:
+        _log_quellenfehler("arxiv", err)
         return []
     out = []
     for e in re.findall(r"<entry>.*?</entry>", xml, re.S):
@@ -200,7 +220,7 @@ def q_pubmed(query, n=6):
     url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" + urllib.parse.urlencode(
         {"db":"pubmed","term":query,"retmax":n,"retmode":"json","sort":"relevance"})
     j = http_json(url)
-    if "_error" in j: return []
+    if _check_fehler("pubmed", j): return []
     ids = (j.get("esearchresult",{}) or {}).get("idlist",[]) or []
     if not ids: return []
     # Metadaten holen
@@ -251,7 +271,7 @@ def q_wikidata(query, n=6):
     url = "https://www.wikidata.org/w/api.php?" + urllib.parse.urlencode(
         {"action":"wbsearchentities","search":query,"language":"de","format":"json","limit":n})
     j = http_json(url)
-    if "_error" in j: return []
+    if _check_fehler("wikidata", j): return []
     out=[]
     for e in (j.get("search") or [])[:n]:
         out.append({"title": e.get("label") or e.get("id"),
@@ -262,9 +282,12 @@ def q_wikidata(query, n=6):
     return out
 
 def q_lokal(query, n=10, zeitlimit_s=3):
-    """LOKAL-SUCHE: durchsucht Davids HAUPTLAGER-Wissensbasis (Dateinamen + Inhalt).
+    """LOKAL-SUCHE: durchsucht Davids HAUPTLAGER-Wissensbasis (Datei-NAMEN).
     Findet, was DAVID schon hat — vermeidet Doppelrecherche.
-    P3: hartes Zeitlimit (default 3s) — os.walk über 133GB darf die Suche nie blockieren."""
+    Hinweis (F8/OpenCode): matcht NUR Dateinamen, nicht Datei-Inhalt
+    (Inhalts-Suche wäre zu langsam über 133GB).
+    P3: hartes Zeitlimit (default 3s) — os.walk über 133GB darf die Suche nie
+    blockieren; wird auch INNERHALB großer Verzeichnisse geprüft (F8)."""
     import time as _time
     base = "~//HAUPTLAGER"
     kw = [w.lower() for w in query.split() if len(w)>3]
@@ -278,6 +301,8 @@ def q_lokal(query, n=10, zeitlimit_s=3):
         if any(x in root for x in (".git","node_modules","07_SYSTEM","20_FROZEN")):
             dirs[:]=[]; continue
         for f in files:
+            if _time.monotonic() - t_start > zeitlimit_s:
+                break  # F8: auch innerhalb eines riesigen Ordners stoppen
             if not f.lower().endswith((".md",".pdf",".txt",".bib")): continue
             name = f.lower()
             if any(k in name for k in kw):
@@ -312,7 +337,8 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     - Dedup + Scoring NACH dem Fanout → deterministische Reihenfolge
     - Jede Quelle läuft in eigenem Thread; Fehler werden geloggt (P1), nie still
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import queue as _queue
+    import threading as _t
     import time as _time
 
     # F5 (Codex): Fehlerregister pro Lauf — alte Fehler dürfen nicht in neue Suche
@@ -337,27 +363,42 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     tasks = [(name, fn, qy) for qy in queries for name, fn in active.items()]
     if not tasks:
         return []
-    ex = ThreadPoolExecutor(max_workers=min(8, len(tasks)))
-    futs = {ex.submit(_run_quelle, name, fn, qy, n): (name, qy) for name, fn, qy in tasks}
-    try:
+
+    # F1 (OpenCode): eigene DAEMON-Threads statt ThreadPoolExecutor. Py3.11-
+    # ThreadPoolExecutor joint beim Prozess-Exit ALLE Worker (auch daemon) via
+    # _python_exit → Prozess hängt nach Budget. Daemon-Threads sterben mit dem
+    # Interpreter, der Prozess endet sofort.
+    ergebnis_q = _queue.Queue()
+    threads = []
+    for name, fn, qy in tasks:
+        def _run(name=name, fn=fn, qy=qy):
+            try:
+                ergebnis_q.put((name, "ok", list(fn(qy, n))))
+            except Exception as e:
+                ergebnis_q.put((name, "err", e))
+        t = _t.Thread(target=_run, daemon=True)
+        t.start()
+        threads.append(t)
+
+    # Ergebnisse einsammeln bis Budget abläuft oder alle fertig sind
+    offen = len(tasks)
+    while offen > 0 and _time.monotonic() - t_start < budget_s:
         try:
-            for fut in as_completed(futs, timeout=budget_s):
-                name = futs[fut][0]
-                try:
-                    for it in fut.result():
-                        key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
-                        if key and key not in seen:
-                            seen.add(key); results.append(it)
-                except Exception as e:
-                    _log_quellenfehler(name, e)
-        except Exception:
-            # Budget abgelaufen: nicht startende Futures canceln, laufende NICHT
-            # abwarten (sonst blockiert der Kontextmanager bis Quelle endet!)
-            budget_ueberschritten = True
-    finally:
-        # wait=False: search() kehrt sofort zurück, hängende Threads blockieren nicht.
-        # Echte Quellen enden ohnehin nach net.py's 8s-Timeout von selbst.
-        ex.shutdown(wait=False, cancel_futures=True)
+            name, status, payload = ergebnis_q.get(timeout=0.2)
+            offen -= 1
+            if status == "ok":
+                for it in payload:
+                    key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
+                    if key and key not in seen:
+                        seen.add(key); results.append(it)
+            else:
+                _log_quellenfehler(name, payload)
+        except _queue.Empty:
+            continue  # noch keine Antwort — weiter auf Budget warten
+
+    if offen > 0:
+        budget_ueberschritten = True
+        # Verwaiste Threads NICHT joinen — daemon, sterben mit Prozess (F1)
     # --- Filter: min_year ---
     if min_year:
         results = [r for r in results if _ok_year(r.get("year"), min_year)]
@@ -373,10 +414,6 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
         print(f"  ⚠ Gesamtbudget ({budget_s}s) überschritten — Teilergebnis ({len(results)} Treffer)", file=sys.stderr)
     return results
 
-
-def _run_quelle(name, fn, qy, n):
-    """Eine Quelle für eine Query-Variante ausführen (im Thread-Pool)."""
-    return list(fn(qy, n))
 
 def _expand_query(query):
     """Query-Expansion: basis + deutsche/englische Varianten + Kernbegriffe."""
@@ -424,7 +461,10 @@ def _score_sort(results):
         # Zitate log-skaliert (häufig 0), + Relevanz + Quelle + OA
         s = (min(cites, 200) / 40.0) + (rel * 1.5) + src + oa
         return s
-    return sorted(results, key=score, reverse=True)
+    # F7 (OpenCode): deterministisch bei Punktgleichstand — sortiere nach Score,
+    # dann nach Titel/URL als stabilem letzten Schlüssel (nicht nach
+    # Thread-Completion-Reihenfolge der parallelen Futures)
+    return sorted(results, key=lambda r: (score(r), (r.get("title") or "")[:80]), reverse=True)
 
 def _to_int(y):
     try: return int(str(y)[:4])

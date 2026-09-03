@@ -45,12 +45,17 @@ _transport = None
 
 
 def _open(url: str, timeout: int = TIMEOUT_S):
-    """Echter Öffner ODER FakeTransport (wenn Test-Hook gesetzt)."""
+    """Echter Öffner ODER FakeTransport (wenn Test-Hook gesetzt).
+
+    WICHTIG: gibt die Bytes zurück (nicht die Response) — die Response wird
+    im with-Block geschlossen; wer sie nach außen gibt, liest 0 Bytes.
+    FakeTransport liefert (status, body)-Tupel — _decode_body behandelt beide.
+    """
     if _transport is not None:
         return _transport.open(url, timeout=timeout)
     req = urllib.request.Request(url, headers=UA)
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r
+        return r.read()
 
 
 # ---------- Block-Erkennung ----------
@@ -89,15 +94,29 @@ def block_indicator(body, erwartet="json"):
 
 
 def _decode_body(resp) -> bytes:
+    """Body als Bytes normalisieren.
+
+    - Echter Transport (net._open): liefert schon Bytes (im with gelesen)
+    - FakeTransport: (status, body)-Tupel
+    """
     if isinstance(resp, tuple) and len(resp) == 2:  # FakeTransport: (status, body)
         return resp[1] if isinstance(resp[1], bytes) else str(resp[1]).encode()
-    return resp.read()
+    if isinstance(resp, bytes):
+        return resp
+    if hasattr(resp, "read"):
+        return resp.read()
+    return str(resp).encode()
 
 
 # ---------- Öffentliche API (kompatibel zu http_json) ----------
 
 def get_json(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
-    """JSON laden mit Format-Validierung + Retry. Rückgabe: JSON ODER {"_error": ...}."""
+    """JSON laden mit Format-Validierung + Retry. Rückgabe: dict/list ODER {"_error": ...}.
+
+    Vertrag (F6/OpenCode): garantiert dict ODER list. Gültige JSON-Skalare
+    (true/123/"ok") sind zwar kein Block (F7/Codex), aber für Such-APIs nutzlos
+    → werden als _error zurückgegeben, damit keine q_*-Funktion crasht.
+    """
     last = None
     for i in range(retries + 1):
         try:
@@ -111,7 +130,11 @@ def get_json(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
                     if proxied is not None:
                         return proxied
                 continue
-            return json.loads(body.decode("utf-8", "replace"))
+            parsed = json.loads(body.decode("utf-8", "replace"))
+            if not isinstance(parsed, (dict, list)):
+                # JSON-Skalar: kein Block, aber vertragswidrig → Fehler (F6)
+                return {"_error": f"FORMAT: JSON-Skalar ({type(parsed).__name__}), erwarte Objekt/Liste"}
+            return parsed
         except urllib.error.HTTPError as e:
             if e.code == 429 and i < retries:
                 time.sleep(BACKOFF_429_S)
@@ -141,7 +164,13 @@ def get_text(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
                 if proxy_retry and i == 0:
                     proxied = _try_proxy(url, timeout, erwartet="text")
                     if proxied is not None:
-                        return proxied, None
+                        # F4 (OpenCode): Proxy-Text-Antwort auch auf Block prüfen —
+                        # Captcha/Botwall vom Proxy darf nicht als Erfolg gelten
+                        pgrund = block_indicator(proxied, erwartet="text")
+                        if pgrund:
+                            last = f"proxy:{pgrund}"
+                        else:
+                            return proxied, None
                 continue
             return body.decode("utf-8", "ignore"), None
         except urllib.error.HTTPError as e:

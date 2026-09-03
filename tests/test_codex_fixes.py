@@ -86,8 +86,13 @@ def test_f3_q_base_nutzt_net(monkeypatch):
 
 # F4: health_check --json gibt NUR JSON aus
 
+@pytest.mark.live
 def test_f4_health_json_clean(monkeypatch, capsys):
-    """--json muss ausschließlich gültiges JSON auf stdout geben."""
+    """--json muss ausschließlich gültiges JSON auf stdout geben.
+
+    F10 (OpenCode): Live-Netz-Test (ruft echte Quellen + verbraucht API-Quota)
+    → hinter @pytest.mark.live, läuft NICHT in der Offline-Suite.
+    """
     import json as _json
     import scripts.health_check as hc  # noqa — Pfad-Setup nötig
     # Direkter Test der Logik: --json-Zweig darf keine Prints mischen
