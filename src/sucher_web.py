@@ -66,23 +66,53 @@ def _log_web_error(quelle, exc):
         pass
 
 
-# ---------- Quelle 1: DuckDuckGo (ddgs) ----------
+# ---------- Quelle 1: DuckDuckGo (ddgs, Lib + HTML-Fallback) ----------
 def q_ddgs(query, n=8):
+    """DDG-Suche: erst Python-Lib, bei Fehler HTML-Fallback (Shiraberu-Muster).
+
+    Fallback nutzt html.duckduckgo.com/html/?o=json — läuft über net.get_text
+    (8s-Cap + Block-Erkennung), parsebar als JSON-Objekte im HTML.
+    """
+    out = []
+    # Weg 1: ddgs-Lib
     try:
         from ddgs import DDGS
-    except ImportError:
-        _log_web_error("ddgs", "Lib fehlt: pip install ddgs")
-        return []
-    out = []
-    try:
         with DDGS() as d:
             for r in list(d.text(query, max_results=n)):
                 out.append({"title": r.get("title", ""), "year": None,
                     "venue": "Web", "is_oa": True, "pdf": None, "doi": None,
                     "source": "ddgs", "url": r.get("href"),
                     "snippet": (r.get("body") or "")[:200]})
+        if out:
+            return out
+    except Exception:
+        pass  # → HTML-Fallback
+    # Weg 2: HTML o=json (Shiraberu: html.duckduckgo.com/html/?o=json)
+    try:
+        import net
+        import urllib.parse
+        url = "https://html.duckduckgo.com/html/?" + urllib.parse.urlencode(
+            {"q": query, "o": "json", "v": "1"})
+        text, err = net.get_text(url, timeout=12)
+        if err:
+            _log_web_error("ddgs", f"HTML-Fallback: {err}")
+            return []
+        for m in re.finditer(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+                             text, re.S):
+            href, raw_title = m.group(1), m.group(2)
+            # DDG-Redirect-URLs auflösen (//duckduckgo.com/l/?uddg=<encoded>)
+            um = re.search(r"uddg=([^&]+)", href)
+            link = urllib.parse.unquote(um.group(1)) if um else href
+            if not link.startswith("http"):
+                continue
+            title = re.sub(r"<[^>]+>", "", raw_title).strip()
+            out.append({"title": title, "year": None, "venue": "Web",
+                        "is_oa": True, "pdf": None, "doi": None,
+                        "source": "ddgs", "url": link, "snippet": ""})
+            if len(out) >= n:
+                break
     except Exception as e:
-        _log_web_error("ddgs", e)
+        _log_web_error("ddgs", f"HTML-Fallback: {e}")
     return out
 
 # ---------- Quelle 2: Bing via RSS (saubere echte URLs, keine Redirects) ----------

@@ -57,6 +57,65 @@ def test_mojeek_parst_echte_ergebnisse(mojeek_route):
     assert out[0]["source"] == "Mojeek"
 
 
+# --- Block 3 (Shiraberu): DDG-HTML-Fallback ---
+
+DDG_HTML_OK = """<html><body>
+<div class="result">
+<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2F1&amp;rut=x">Erster DDG Treffer</a>
+</div>
+<div class="result">
+<a class="result__a" href="https://example.com/2">Zweiter Treffer</a>
+</div>
+</body></html>"""
+
+
+def test_ddgs_lib_fehlt_nutzt_html_fallback(fake_transport, monkeypatch, capsys):
+    """ddgs-Lib wirft → HTML-Fallback liefert Treffer (Block 3/Shiraberu)."""
+    import net
+    monkeypatch.setattr(net, "_transport", fake_transport)
+    fake_transport.route("https://html.duckduckgo.com/html/",
+                         fake_transport.ok_html(DDG_HTML_OK))
+
+    # Lib-Import scheitern lassen
+    import builtins
+    orig_import = builtins.__import__
+    def kaputter_import(name, *a, **k):
+        if name == "ddgs":
+            raise ImportError("Lib kaputt")
+        return orig_import(name, *a, **k)
+    monkeypatch.setattr(builtins, "__import__", kaputter_import)
+
+    out = web.q_ddgs("test", 5)
+    assert len(out) == 2, f"HTML-Fallback muss 2 Treffer liefern: {out}"
+    # Redirect-URL aufgelöst:
+    urls = [r["url"] for r in out]
+    assert any("example.com/1" in u for u in urls), f"uddg-Redirect nicht aufgelöst: {urls}"
+    assert out[0]["source"] == "ddgs"
+
+
+def test_ddgs_lib_ok_kein_html(fake_transport, monkeypatch):
+    """Lib liefert → HTML-Fallback wird nicht angerufen."""
+    import net
+    monkeypatch.setattr(net, "_transport", fake_transport)
+
+    orig_import = __import__
+    def ddgs_lib(name, *a, **k):
+        if name == "ddgs":
+            class FakeDDG:
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+                def text(self, query, max_results=8):
+                    return [{"title": "Lib Treffer", "href": "http://lib.de", "body": "x"}]
+            return type("DDGSMod", (), {"DDGS": FakeDDG})
+        return orig_import(name, *a, **k)
+    monkeypatch.setattr("builtins.__import__", ddgs_lib)
+
+    out = web.q_ddgs("test", 5)
+    assert len(out) == 1 and out[0]["url"] == "http://lib.de"
+    # HTML-Route wurde nie aufgerufen:
+    assert fake_transport.calls == [] or not any("html.duckduckgo" in c for c in fake_transport.calls)
+
+
 def test_wikipedia_web_parst_de_en(fake_transport, monkeypatch):
     """Wikipedia DE+EN: MediaWiki-API-JSON → Treffer mit sauberen URLs."""
     import net
