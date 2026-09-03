@@ -23,25 +23,55 @@ QUERY = "posttraumatic growth"
 N = 3
 TIMEOUT_PER = 12
 
+
 def _measure(name, fn):
-    """Eine Quelle einmal ausführen: Treffer/Fehler/Latenz messen."""
+    """Eine Quelle mit HARTEM Timeout messen: Treffer/Fehler/Latenz.
+
+    F5 (OpenCode-Gesamt): läuft in eigenem Thread mit timeout — eine hängende
+    Quelle (bis 20s bei manchen q_*) darf den Health-Check nicht blockieren.
+    """
+    import threading
+    box = {}
+
+    def _lauf():
+        t0 = time.time()
+        try:
+            res = fn(QUERY, N) or []
+            lat = round(time.time() - t0, 1)
+            if not res:
+                box["r"] = {"quelle": name, "status": "0 Treffer", "treffer": 0,
+                            "latenz_s": lat, "fehler": None}
+            else:
+                box["r"] = {"quelle": name, "status": "OK", "treffer": len(res),
+                            "latenz_s": lat, "fehler": None,
+                            "beispiel": res[0].get("title", "")[:60]}
+        except Exception as e:
+            lat = round(time.time() - t0, 1)
+            box["r"] = {"quelle": name, "status": "FEHLER", "treffer": 0,
+                        "latenz_s": lat, "fehler": str(e)[:100]}
+
+    t = threading.Thread(target=_lauf, daemon=True)
     t0 = time.time()
-    try:
-        res = fn(QUERY, N) or []
-        lat = round(time.time() - t0, 1)
-        if not res:
-            return {"quelle": name, "status": "0 Treffer", "treffer": 0,
-                    "latenz_s": lat, "fehler": None}
-        return {"quelle": name, "status": "OK", "treffer": len(res),
-                "latenz_s": lat, "fehler": None,
-                "beispiel": res[0].get("title", "")[:60]}
-    except Exception as e:
-        lat = round(time.time() - t0, 1)
-        return {"quelle": name, "status": "FEHLER", "treffer": 0,
-                "latenz_s": lat, "fehler": str(e)[:100]}
+    t.start()
+    t.join(timeout=TIMEOUT_PER + 2)
+    if t.is_alive():
+        return {"quelle": name, "status": f"TIMEOUT>{TIMEOUT_PER}s", "treffer": 0,
+                "latenz_s": TIMEOUT_PER, "fehler": "Timeout überschritten"}
+    return box.get("r", {"quelle": name, "status": "FEHLER", "treffer": 0,
+                         "latenz_s": 0, "fehler": "unbekannt"})
+
+
+def _arg_value(flag, default=None):
+    """Wert hinter --flag lesen — defensiv (F5: kein IndexError am Ende)."""
+    if flag in sys.argv:
+        i = sys.argv.index(flag)
+        if i + 1 < len(sys.argv) and not sys.argv[i + 1].startswith("--"):
+            return sys.argv[i + 1]
+    return default
+
 
 def main():
-    only_web = "--modus" in sys.argv and sys.argv[sys.argv.index("--modus")+1] == "web"
+    only_web = _arg_value("--modus") == "web"
     as_json = "--json" in sys.argv
 
     # Akademische + allgemeine Quellen (sucher_universal)
@@ -59,11 +89,29 @@ def main():
     if not only_web:
         for grp, srcs in (("WISSENSCHAFT", akad), ("ALLGEMEIN", general)):
             for name, fn in srcs.items():
-                ergebnisse.append(_measure(name, fn))
-        ergebnisse.append(_measure("lokal", su.GENERAL["lokal"]))
+                ergebnisse.append((name, fn))
+        ergebnisse.append(("lokal", su.GENERAL["lokal"]))
     for name, fn in web.items():
-        ergebnisse.append(_measure(name, fn))
+        ergebnisse.append((name, fn))
 
+    # F5: ALLE Quellen PARALLEL messen (daemon-Threads) → Gesamtzeit = langsamste,
+    # nicht Summe. _measure hat eigenen harten Timeout je Quelle.
+    import threading
+    messungen = {}
+    def _run(name_fn):
+        name, fn = name_fn
+        messungen[name] = _measure(name, fn)
+    threads = [threading.Thread(target=_run, args=(nf,), daemon=True)
+               for nf in ergebnisse]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=TIMEOUT_PER + 3)
+    # Timeout-Fälle, deren Thread nie antwortete
+    for name, _fn in ergebnisse:
+        if name not in messungen:
+            messungen[name] = {"quelle": name, "status": f"TIMEOUT>{TIMEOUT_PER}s",
+                               "treffer": 0, "latenz_s": TIMEOUT_PER,
+                               "fehler": "Timeout überschritten"}
+    ergebnisse = [messungen[n] for n, _ in ergebnisse]
     # F4 (Codex): --json muss AUSSCHLIESSLICH gültiges JSON auf stdout geben.
     if as_json:
         print(json.dumps(ergebnisse, ensure_ascii=False, indent=2))
