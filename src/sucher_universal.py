@@ -33,20 +33,13 @@ def _get_quellen_fehler():
     return {q: (m, n) for q, (m, n) in _QUELLEN_FEHLER.items() if n > 0}
 
 def http_json(url, timeout=25, retries=2):
-    for i in range(retries+1):
-        try:
-            req = urllib.request.Request(url, headers=UA)
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return json.load(r)
-        except urllib.error.HTTPError as e:
-            if e.code == 429 and i < retries:
-                time.sleep(5); continue
-            return {"_error": f"HTTP {e.code}"}
-        except Exception as e:
-            if i < retries:
-                time.sleep(3); continue
-            return {"_error": str(e)[:80]}
-    return {"_error": "timeout"}
+    """Kompatibilitäts-Shim → net.get_json (P2: 8s-Timeout, Format-Validierung).
+
+    Der alte Default (25s) wird auf net.py's harten 8s reduziert, damit eine
+    langsame Quelle die Gesamtsuche nicht blockiert.
+    """
+    import net
+    return net.get_json(url, timeout=8, retries=retries)
 
 # ---------- Wissenschaftliche Quellen ----------
 def q_openalex(query, n=8):
