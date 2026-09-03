@@ -301,6 +301,131 @@ def q_exa(query, n=8):
     return out
 
 
+# ---------- Quelle 8: HackerNews (Algolia-API, key-frei, JSON) ----------
+def q_hn(query, n=8):
+    """HackerNews-Suche über die offizielle Algolia-API — KEIN Key nötig.
+
+    Live verifiziert 03.09.2026 (Agent-2-Recherche): HTTP 200, 10.000 req/h.
+    Ask-HN-Posts haben kein url-Feld → Item-Link (news.ycombinator.com).
+    """
+    try:
+        import net
+    except ImportError:
+        _log_web_error("hn", "net fehlt")
+        return []
+    out = []
+    url = "https://hn.algolia.com/api/v1/search?" + urllib.parse.urlencode(
+        {"query": query, "hitsPerPage": n})
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("hn", j["_error"])
+        return []
+    for r in j.get("hits", [])[:n]:
+        title = r.get("title") or ""
+        if not title:
+            continue
+        link = r.get("url")
+        if not link:  # Ask-HN/Show-HN ohne externe URL → Item-Seite
+            link = f"https://news.ycombinator.com/item?id={r.get('objectID', '')}"
+        # created_at: "2025-10-29T18:57:29Z" → Jahr
+        year = None
+        ca = r.get("created_at") or ""
+        if len(ca) >= 4 and ca[:4].isdigit():
+            year = int(ca[:4])
+        pts = r.get("points")
+        author = r.get("author") or ""
+        snip = f"{pts} Punkte · {author}" if pts else (author or "")
+        out.append({"title": title, "year": year, "venue": "HackerNews",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "HackerNews", "url": link, "snippet": snip})
+    return out
+
+
+# ---------- Quelle 9: Google News RSS (key-frei) ----------
+def q_google_news(query, n=8):
+    """Google-News über den key-freien RSS-Feed (live 03.09.2026: HTTP 200).
+
+    Item-Links sind Google-Redirect-Tokens (news.google.com/rss/articles/…)
+    — bleiben als Link (RSS-Reader-Muster), der Browser löst sie auf.
+    """
+    import html as _html
+    try:
+        import net
+    except ImportError:
+        _log_web_error("google_news", "net fehlt")
+        return []
+    out = []
+    url = "https://news.google.com/rss/search?" + urllib.parse.urlencode(
+        {"q": query, "hl": "de", "gl": "DE", "ceid": "DE:de"})
+    xml, err = net.get_text(url, timeout=12)
+    if err:
+        _log_web_error("google_news", f"Block/Fehler: {err}")
+        return []
+    for item in re.findall(r"<item>.*?</item>", xml, re.DOTALL):
+        t = re.search(r"<title>(.*?)</title>", item, re.DOTALL)
+        l = re.search(r"<link>(.*?)</link>", item, re.DOTALL)
+        d = re.search(r"<description>(.*?)</description>", item, re.DOTALL)
+        if not t or not l:
+            continue
+        title = _html.unescape(t.group(1)).strip()
+        link = _html.unescape(l.group(1)).strip()
+        if not title or not link.startswith("http"):
+            continue
+        out.append({"title": title, "year": None, "venue": "News",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "GoogleNews", "url": link,
+                    "snippet": re.sub(r"<[^>]+>", "", _html.unescape(
+                        d.group(1)))[:200] if d else ""})
+        if len(out) >= n:
+            break
+    return out
+
+
+# ---------- Quelle 10: Bing News RSS (key-frei, echte URL im apiclick-Param) ----------
+def q_bing_news(query, n=8):
+    """Bing-News über den key-freien RSS-Feed (live 03.09.2026: HTTP 200).
+
+    Der item-Link ist ein apiclick-Wrapper — die ECHTE Ziel-URL steckt im
+    url=-Parameter (dekodierbar, kein Extra-Request nötig).
+    """
+    import html as _html
+    try:
+        import net
+    except ImportError:
+        _log_web_error("bing_news", "net fehlt")
+        return []
+    out = []
+    url = "https://www.bing.com/news/search?" + urllib.parse.urlencode(
+        {"q": query, "format": "rss"})
+    xml, err = net.get_text(url, timeout=12)
+    if err:
+        _log_web_error("bing_news", f"Block/Fehler: {err}")
+        return []
+    for item in re.findall(r"<item>.*?</item>", xml, re.DOTALL):
+        t = re.search(r"<title>(.*?)</title>", item, re.DOTALL)
+        l = re.search(r"<link>(.*?)</link>", item, re.DOTALL)
+        d = re.search(r"<description>(.*?)</description>", item, re.DOTALL)
+        if not t or not l:
+            continue
+        title = _html.unescape(t.group(1)).strip()
+        raw_link = _html.unescape(l.group(1)).strip()
+        # echte URL aus apiclick: url=https%3a%2f%2f… extrahieren
+        link = raw_link
+        um = re.search(r"[?&]url=([^&]+)", raw_link)
+        if um:
+            link = urllib.parse.unquote(um.group(1))
+        if not title or not link.startswith("http"):
+            continue
+        out.append({"title": title, "year": None, "venue": "News",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "BingNews", "url": link,
+                    "snippet": re.sub(r"<[^>]+>", "", _html.unescape(
+                        d.group(1)))[:200] if d else ""})
+        if len(out) >= n:
+            break
+    return out
+
+
 # Key-Quellen → Env-Variablen (für NO_KEY-Handling)
 KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
                    "serpapi": "SERPAPI_API_KEY"}
@@ -308,12 +433,15 @@ KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
 # ---------- Register ----------
 WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
        "wikipedia": q_wikipedia_web, "tavily": q_tavily, "exa": q_exa,
-       "serpapi": q_serpapi}
+       "serpapi": q_serpapi, "hn": q_hn, "google_news": q_google_news,
+       "bing_news": q_bing_news}
 
 # P6-B3: Web-Quellen-Gewichte (für deterministische Sortierung — nicht
 # completion-order der Threads). Bing hinten: Junk-Problem (Juli-Audit ⭐⭐).
+# Block 5: HackerNews hoch (relevante Tech-Treffer), News-Feeds mittel.
 _WEB_WEIGHT = {"ddgs": 1.0, "mojeek": 1.0, "wikipedia": 0.9, "tavily": 0.8,
-               "exa": 0.8, "serpapi": 0.9, "bing": 0.4}
+               "exa": 0.8, "serpapi": 0.9, "bing": 0.4, "hackernews": 0.95,
+               "googlenews": 0.7, "bingnews": 0.5}
 
 
 def _web_score_sort(results):
@@ -488,7 +616,6 @@ def list_web():
     for name, fn in WEB.items():
         needs = "Key" if name in ("tavily", "serpapi", "exa") else "frei"
         print(f"  {name:10s} ({needs})")
-
 
 if __name__ == "__main__":
     q = sys.argv[1] if len(sys.argv) > 1 else "IT Systemhaus München"
