@@ -356,23 +356,36 @@ def q_openaire(query, n=8):
             r = h["metadata"]["oaf:entity"]["oaf:result"]
         except (KeyError, TypeError):
             continue
-        titles = r.get("title") or [{}]
-        title = titles[0].get("$") if isinstance(titles, list) else ""
+        titles = r.get("title")
+        if not isinstance(titles, list):
+            titles = [titles] if isinstance(titles, dict) else [{}]
+        title = titles[0].get("$") if isinstance(titles[0], dict) else str(titles[0])
+        title = title if isinstance(title, str) else ""
         if not title:
             continue
         yr = None
-        dacc = r.get("dateofacceptance") or [{}]
-        dp = dacc[0].get("$", "") if isinstance(dacc, list) else ""
-        if len(dp) >= 4 and dp[:4].isdigit():
+        dacc = r.get("dateofacceptance")
+        if not isinstance(dacc, list):
+            dacc = [dacc] if isinstance(dacc, dict) else []
+        dp = dacc[0].get("$", "") if dacc and isinstance(dacc[0], dict) else (
+            str(dacc[0]) if dacc else "")
+        if isinstance(dp, str) and len(dp) >= 4 and dp[:4].isdigit():
             yr = int(dp[:4])
         doi = None
-        for p in (r.get("pid") or []):
+        pid_raw = r.get("pid")
+        # pid kann Liste von dicts ODER einzelnes dict sein (OpenAIRE-Varianz)
+        pid_items = pid_raw if isinstance(pid_raw, list) else (
+            [pid_raw] if isinstance(pid_raw, dict) else [])
+        for p in pid_items:
             pv = p.get("$", "") if isinstance(p, dict) else ""
-            if pv.startswith("doi:"):
+            if isinstance(pv, str) and pv.startswith("doi:"):
                 doi = pv[4:]
                 break
-        creators = r.get("creator") or [{}]
-        author = creators[0].get("$", "") if creators else ""
+        creators = r.get("creator")
+        if not isinstance(creators, list):
+            creators = [creators] if isinstance(creators, dict) else []
+        author = creators[0].get("$", "") if creators and isinstance(
+            creators[0], dict) else (str(creators[0]) if creators else "")
         journal = (r.get("journal") or {}).get("name") or [{}]
         venue = journal[0].get("$", "") if isinstance(journal, list) else ""
         link = f"https://doi.org/{doi}" if doi else None
