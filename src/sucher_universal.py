@@ -359,7 +359,7 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
             try:
                 import ratelimit
                 ratelimit.throttle(name)
-            except Exception:
+            except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
                 pass
             # TTL-Cache (Shiraberu): gleiche (Quelle, Query, n) binnen 15 Min
             # kommt aus dem Cache statt das Netz zu fragen
@@ -371,7 +371,7 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                     # Status 'cached' → Main-Loop committet weder ok noch fail.
                     ergebnis_q.put((name, "cached", treffer, False))
                     return
-            except Exception:
+            except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
                 pass
             # F6 (OpenCode): Fehler-Zählerstand VOR dem Aufruf merken — der
             # Worker meldet seinen EIGENEN Fehlerstatus im Tupel mit, statt dass
@@ -389,7 +389,7 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                     try:
                         import cache as _cache
                         _cache.put("studien", name, qy, n, payload)
-                    except Exception:
+                    except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
                         pass
                 ergebnis_q.put((name, "ok" if not hatte_fehler else "err_lokal",
                                 payload, hatte_fehler))

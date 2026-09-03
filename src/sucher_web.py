@@ -85,14 +85,15 @@ def q_ddgs(query, n=8):
                     "snippet": (r.get("body") or "")[:200]})
         if out:
             return out
-    except Exception:
+    except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
         pass  # → HTML-Fallback
     # F4 (OpenCode-Shiraberu): Teiltreffer der Lib nicht mit Fallback mischen
     out = []
     # Weg 2: HTML o=json (Shiraberu: html.duckduckgo.com/html/?o=json)
     try:
-        import net
         import urllib.parse
+
+        import net
         url = "https://html.duckduckgo.com/html/?" + urllib.parse.urlencode(
             {"q": query, "o": "json", "v": "1"})
         text, err = net.get_text(url, timeout=12)
@@ -100,7 +101,7 @@ def q_ddgs(query, n=8):
             _log_web_error("ddgs", f"HTML-Fallback: {err}")
             return []
         for m in re.finditer(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
-                             text, re.S):
+                             text, re.DOTALL):
             href, raw_title = m.group(1), m.group(2)
             # DDG-Redirect-URLs auflösen (//duckduckgo.com/l/?uddg=<encoded>)
             um = re.search(r"uddg=([^&]+)", href)
@@ -396,13 +397,13 @@ def search_web(query, n=8, only=None, timeout=30):
                     # F1: Cache-Treffer = KEIN Health-Signal → Status 'cached'
                     ergebnis_q.put((_n, "cached", treffer))
                     return
-            except Exception:
+            except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
                 pass
             # Rate-Limit (Shiraberu): pro Quelle drosseln (nur bei echtem Request)
             try:
                 import ratelimit
                 ratelimit.throttle(_n)
-            except Exception:
+            except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
                 pass
             try:
                 ergebnis = list(_f(query, n))
@@ -411,7 +412,7 @@ def search_web(query, n=8, only=None, timeout=30):
                     try:
                         import cache as _cache
                         _cache.put("web", _n, query, n, ergebnis)
-                    except Exception:
+                    except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
                         pass
                 ergebnis_q.put((_n, "ok", ergebnis))
             except Exception as e:

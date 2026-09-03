@@ -109,7 +109,7 @@ def put(fanout: str, quelle: str, query: str, n: int, results: list,
                 conn.rollback()
             finally:
                 conn.close()
-    except Exception:
+    except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
         pass  # Cache-Schreiben nie fatal
 
 
@@ -126,5 +126,5 @@ def clear(db_path=None) -> None:
                 conn.commit()
             finally:
                 conn.close()
-    except Exception:
+    except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
         pass
