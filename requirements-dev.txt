@@ -1,0 +1,4 @@
+# SUCHER-1000 — Dev-Abhängigkeiten (Tests)
+pytest>=8.0
+pytest-cov
+pytest-timeout
