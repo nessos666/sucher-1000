@@ -32,6 +32,34 @@ for f in sucher.py src/*.py scripts/*.py; do
     fi
 done
 
+# 1b) Type-Checker (mypy) — Profi-Stufe: findet Typ-Fehler vor dem Laufen
+note "Type-Check (mypy)"
+if "$PY" -m mypy src/*.py sucher.py --ignore-missing-imports 2>&1 | tail -1 | grep -q "Success"; then
+    ok "mypy: keine Typ-Fehler"
+else
+    "$PY" -m mypy src/*.py sucher.py --ignore-missing-imports 2>&1 | tail -5
+    bad "mypy: Typ-Fehler gefunden"
+fi
+
+# 1c) Linter (ruff) — Profi-Stufe: Code-Geruch
+note "Linter (ruff)"
+if .venv/bin/ruff check src/ sucher.py scripts/ 2>&1 | tail -1 | grep -q "All checks passed\|Found 0 errors"; then
+    ok "ruff: keine Meldungen"
+else
+    .venv/bin/ruff check src/ sucher.py scripts/ 2>&1 | tail -3
+    bad "ruff: Code-Geruch gefunden (siehe oben)"
+fi
+
+# 1d) Security-Scanner (bandit) — Profi-Stufe: unsichere Muster
+note "Security (bandit)"
+BANDIT_OUT=$("$PY" -m bandit -r src/ -q 2>&1)
+if echo "$BANDIT_OUT" | grep -qE "Severity: (High|Medium)"; then
+    echo "$BANDIT_OUT" | grep -B1 -A3 "Severity: (High|Medium)"
+    bad "bandit: High/Medium-Funde"
+else
+    ok "bandit: keine High/Medium-Funde"
+fi
+
 # 2) Offline-Tests (Netz gemockt, kein Live-Zugriff)
 if [ "${1:-}" != "live" ]; then
     note "Offline-Tests (pytest)"
