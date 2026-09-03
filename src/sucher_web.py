@@ -50,6 +50,26 @@ def _env(name):
             pass
     return (v or "").strip()
 
+def _web_fehler_count(name):
+    """Fehler-Zähler mit Alias-Normalisierung lesen (F4/F1-OpenCode).
+
+    q_*-Funktionen loggen teils unter abweichendem Label ('Mojeek' vs.
+    Register-Key 'mojeek'). Der Worker-Vergleich (F4) braucht DIESELBE
+    Normalisierung wie der Health-Commit, sonst bleibt der Zähler 0 und
+    eine kranke Quelle wird HEALTHY (Regression durch F4-Fix).
+    """
+    with _WEB_FEHLER_LOCK:
+        if name in _WEB_FEHLER:
+            return _WEB_FEHLER[name][1]
+        low = name.lower()
+        if low in _WEB_FEHLER:
+            return _WEB_FEHLER[low][1]
+        for label, info in _WEB_FEHLER.items():
+            if label.lower().startswith(low) or low.startswith(label.lower()):
+                return info[1]
+        return 0
+
+
 def _log_web_error(quelle, exc):
     """Fehler sichtbar machen (nie still schlucken)."""
     msg = str(exc)[:100]
@@ -64,6 +84,24 @@ def _log_web_error(quelle, exc):
                 _WEB_FEHLER[quelle] = (msg, 1)
     except Exception:  # noqa: S110 - bewusster Fallback (optional)
         pass
+
+
+def _jahr_aus_pubdate(pubdate):
+    """Jahr aus RSS-pubDate extrahieren — F14 (OpenCode-Block5).
+
+    pubDate-Formate: 'Wed, 03 Sep 2026 10:00:00 GMT' | '2026-09-03T10:00:00Z'
+    Gibt int-Jahr oder None (kein Crash bei exotischen Formaten).
+    """
+    import html as _html
+    import re as _re
+    text = _html.unescape(pubdate or "")
+    m = _re.search(r"\b(20\d{2})\b", text)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:  # noqa: S110 - bewusster Fallback (optional)
+            pass
+    return None
 
 
 # ---------- Quelle 1: DuckDuckGo (ddgs, Lib + HTML-Fallback) ----------
@@ -124,7 +162,10 @@ def q_bing_html(query, n=8):
 
     Getestet 03.09.2026: ?format=rss → <item> mit <link>=echte URL.
     F4 (OpenCode-Gesamt): läuft über net.get_text → 8s-Cap + Block-Erkennung.
+    F5 (OpenCode-Block5): Titel/Link/Snippet durch html.unescape ziehen — das
+    echte Bing-RSS liefert XML-Escapes (&amp;, &lt;).
     """
+    import html as _html
     import urllib.parse
     try:
         import net
@@ -142,14 +183,16 @@ def q_bing_html(query, n=8):
         t = re.search(r"<title>(.*?)</title>", item, re.DOTALL)
         l = re.search(r"<link>(.*?)</link>", item, re.DOTALL)
         d = re.search(r"<description>(.*?)</description>", item, re.DOTALL)
+        p = re.search(r"<pubDate>(.*?)</pubDate>", item, re.DOTALL)
         if not t or not l: continue
-        title = t.group(1).strip()
-        link = l.group(1).strip()
+        title = _html.unescape(t.group(1)).strip()
+        link = _html.unescape(l.group(1)).strip()
         if not title or not link.startswith("http"): continue
-        out.append({"title": title, "year": None, "venue": "Web",
+        snip = re.sub(r"<[^>]+>", "", _html.unescape(d.group(1)))[:200] if d else ""
+        out.append({"title": title, "year": _jahr_aus_pubdate(
+            p.group(1) if p else ""), "venue": "Web",
             "is_oa": True, "pdf": None, "doi": None,
-            "source": "Bing", "url": link,
-            "snippet": re.sub(r"<[^>]+>", "", d.group(1))[:200] if d else ""})
+            "source": "Bing", "url": link, "snippet": snip})
         if len(out) >= n: break
     return out
 
@@ -199,7 +242,7 @@ def q_serpapi(query, n=8):
     for r in j.get("organic_results", [])[:n]:
         out.append({"title": r.get("title", ""), "year": None, "venue": "Web",
             "is_oa": True, "pdf": None, "doi": None,
-            "source": "Google", "url": r.get("link"),
+            "source": "SerpApi", "url": r.get("link"),
             "snippet": (r.get("snippet") or "")[:200]})
     return out
 
@@ -252,7 +295,7 @@ def q_wikipedia_web(query, n=8):
     try:
         import net
     except ImportError:
-        _log_web_error("wikipedia", "net fehlt")
+        _log_web_error("wikipedia_web", "net fehlt")
         return []
     out = []
     for lang in ("de", "en"):
@@ -261,7 +304,7 @@ def q_wikipedia_web(query, n=8):
             "format": "json", "srlimit": min(n, 10)})
         j = net.get_json(url, timeout=12)
         if "_error" in j:
-            _log_web_error("wikipedia", f"{lang}: {j['_error']}")
+            _log_web_error("wikipedia_web", f"{lang}: {j['_error']}")
             continue
         for r in j.get("query", {}).get("search", [])[:n]:
             t = r.get("title", "")
@@ -326,7 +369,10 @@ def q_hn(query, n=8):
             continue
         link = r.get("url")
         if not link:  # Ask-HN/Show-HN ohne externe URL → Item-Seite
-            link = f"https://news.ycombinator.com/item?id={r.get('objectID', '')}"
+            oid = r.get("objectID")
+            if not oid:  # F13 (OpenCode-Block5): ohne objectID kein brauchbarer Link
+                continue
+            link = f"https://news.ycombinator.com/item?id={oid}"
         # created_at: "2025-10-29T18:57:29Z" → Jahr
         year = None
         ca = r.get("created_at") or ""
@@ -365,17 +411,19 @@ def q_google_news(query, n=8):
         t = re.search(r"<title>(.*?)</title>", item, re.DOTALL)
         l = re.search(r"<link>(.*?)</link>", item, re.DOTALL)
         d = re.search(r"<description>(.*?)</description>", item, re.DOTALL)
+        p = re.search(r"<pubDate>(.*?)</pubDate>", item, re.DOTALL)
         if not t or not l:
             continue
         title = _html.unescape(t.group(1)).strip()
         link = _html.unescape(l.group(1)).strip()
         if not title or not link.startswith("http"):
             continue
-        out.append({"title": title, "year": None, "venue": "News",
+        out.append({"title": title, "year": _jahr_aus_pubdate(
+            p.group(1) if p else ""), "venue": "News",
                     "is_oa": True, "pdf": None, "doi": None,
                     "source": "GoogleNews", "url": link,
-                    "snippet": re.sub(r"<[^>]+>", "", _html.unescape(
-                        d.group(1)))[:200] if d else ""})
+                    "snippet": _html.unescape(re.sub(r"<[^>]+>", "",
+                        _html.unescape(d.group(1))))[:200] if d else ""})
         if len(out) >= n:
             break
     return out
@@ -405,6 +453,7 @@ def q_bing_news(query, n=8):
         t = re.search(r"<title>(.*?)</title>", item, re.DOTALL)
         l = re.search(r"<link>(.*?)</link>", item, re.DOTALL)
         d = re.search(r"<description>(.*?)</description>", item, re.DOTALL)
+        p = re.search(r"<pubDate>(.*?)</pubDate>", item, re.DOTALL)
         if not t or not l:
             continue
         title = _html.unescape(t.group(1)).strip()
@@ -416,11 +465,12 @@ def q_bing_news(query, n=8):
             link = urllib.parse.unquote(um.group(1))
         if not title or not link.startswith("http"):
             continue
-        out.append({"title": title, "year": None, "venue": "News",
+        out.append({"title": title, "year": _jahr_aus_pubdate(
+            p.group(1) if p else ""), "venue": "News",
                     "is_oa": True, "pdf": None, "doi": None,
                     "source": "BingNews", "url": link,
-                    "snippet": re.sub(r"<[^>]+>", "", _html.unescape(
-                        d.group(1)))[:200] if d else ""})
+                    "snippet": _html.unescape(re.sub(r"<[^>]+>", "",
+                        _html.unescape(d.group(1))))[:200] if d else ""})
         if len(out) >= n:
             break
     return out
@@ -432,7 +482,7 @@ KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
 
 # ---------- Register ----------
 WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
-       "wikipedia": q_wikipedia_web, "tavily": q_tavily, "exa": q_exa,
+       "wikipedia_web": q_wikipedia_web, "tavily": q_tavily, "exa": q_exa,
        "serpapi": q_serpapi, "hn": q_hn, "google_news": q_google_news,
        "bing_news": q_bing_news}
 
@@ -515,6 +565,7 @@ def search_web(query, n=8, only=None, timeout=30):
     results, seen = [], set()
     ergebnis_q = _queue.Queue()
     threads = []
+    quellen_mit_fehler = set()  # F4/F15: Worker-gemeldete Fehler (eigener Lauf)
     for name, fn in active.items():
         def _arbeite(_n=name, _f=fn):
             # TTL-Cache zuerst (F5: kein throttle bei Cache-Hit — kein Netz!)
@@ -533,16 +584,23 @@ def search_web(query, n=8, only=None, timeout=30):
                 ratelimit.throttle(_n)
             except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
                 pass
+            # F4 (OpenCode-Block5): Fehler-Zählerstand VOR dem Aufruf merken —
+            # Worker meldet seinen EIGENEN Fehlerstatus (nicht das globale
+            # Register, das verwaiste Threads aus Vorläufen verfälschen können).
             try:
+                vorher = _web_fehler_count(_n)
                 ergebnis = list(_f(query, n))
-                # Cache füllen (nur echte Ergebnisse)
-                if ergebnis:
+                nachher = _web_fehler_count(_n)
+                hatte_fehler = nachher > vorher
+                # Cache füllen (nur echte Ergebnisse, keine Fehler/leer-Timeout)
+                if ergebnis and not hatte_fehler:
                     try:
                         import cache as _cache
                         _cache.put("web", _n, query, n, ergebnis)
                     except Exception:  # noqa: S110 - Cache/RateLimit nie fatal
                         pass
-                ergebnis_q.put((_n, "ok", ergebnis))
+                ergebnis_q.put((_n, "ok" if not hatte_fehler else "err_lokal",
+                                ergebnis))
             except Exception as e:
                 _log_web_error(_n, e)
                 ergebnis_q.put((_n, "err", []))
@@ -559,8 +617,14 @@ def search_web(query, n=8, only=None, timeout=30):
             offen -= 1
             if status != "cached":
                 quellen_abgeschlossen.add(name)  # F1: Cache ≠ abgeschlossen
-            if payload and status == "ok":
+            if payload and status in ("ok", "err_lokal"):
+                # err_lokal (F4/F15): Treffer vorhanden, ABER Quelle meldete
+                # Fehler → Treffer zählen, für Health trotzdem als Fehler
                 quellen_mit_treffern.add(name)
+            if status == "err_lokal":
+                quellen_mit_fehler.add(name)
+            elif status == "err":
+                quellen_mit_fehler.add(name)
             for it in payload:
                 key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
                 if key and key not in seen:
@@ -571,6 +635,9 @@ def search_web(query, n=8, only=None, timeout=30):
     # Verwaiste Threads NICHT joinen — daemon, sterben mit Prozess (F1)
 
     # P6-B2: Health pro Quelle genau EINMAL committen (aggregiert, nicht pro Thread)
+    # F4 (OpenCode-Block5): Entscheidung basiert auf WORKER-gemeldetem Status
+    # (quellen_mit_fehler), nicht auf dem globalen Register-Snapshot — verwaiste
+    # Threads aus Vorläufen können das Register nach clear() verfälschen.
     if _reg is not None:
         try:
             with _WEB_FEHLER_LOCK:
@@ -600,9 +667,10 @@ def search_web(query, n=8, only=None, timeout=30):
                 if name not in quellen_abgeschlossen:
                     continue  # Timeout — nicht bewerten
                 fehlerinfo = _alias_fehler(name)
-                hat_fehler = fehlerinfo is not None and fehlerinfo[1] > 0
                 fehlertext = fehlerinfo[0] if fehlerinfo else ""
-                if hat_fehler and name not in quellen_mit_treffern:
+                if name in quellen_mit_fehler:
+                    # F15: auch mit (Teil-)Treffern als Fehler verbuchen — sonst
+                    # bliebe eine konstant halbkaputte Quelle HEALTHY.
                     _reg.record_outcome(name, ok=False, error=fehlertext)
                 else:
                     _reg.record_outcome(name, ok=True)

@@ -47,7 +47,9 @@ def ensure_src_imports():
 def main():
     ap = argparse.ArgumentParser(description="SUCHER 1000 — großes Studien-Tool")
     ap.add_argument("query", nargs="?", help="Suchbegriff")
-    ap.add_argument("n", nargs="?", type=int, default=8, help="Anzahl (default 8)")
+    ap.add_argument("n", nargs="?", type=int, default=8,
+                    help="Anzahl PRO QUELLE (default 8) — bei 10 Web-Quellen "
+                         "also bis zu ~80 Treffer; kleiner wählen für wenige")
     ap.add_argument("--modus", default="universal", help="studien|universal|alle|web")
     ap.add_argument("--out", default=DEFAULT_OUT, help="Zielordner")
     ap.add_argument("--download", action="store_true", help="Automatisch frei ladbare herunterladen")

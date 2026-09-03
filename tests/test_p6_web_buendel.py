@@ -29,9 +29,16 @@ MOJEEK_OK_HTML = """<html><body>
 
 @pytest.fixture
 def mojeek_route(fake_transport, monkeypatch):
-    """net._transport so setzen, dass q_mojeek die Captcha-Seite bekommt."""
+    """net._transport so setzen, dass q_mojeek die Captcha-Seite bekommt.
+
+    F11 (OpenCode-Block5): _try_proxy wird AUCH neutralisiert — sonst ginge
+    der BLOCK-Pfad (Captcha-Antwort) bei gesetzten Proxy-Credentials ins
+    echte Netz (Offline-Test!). Muster: route_net in test_block5.
+    """
     import net
     monkeypatch.setattr(net, "_transport", fake_transport)
+    monkeypatch.setattr(net, "_try_proxy", lambda *a, **k: None)
+    monkeypatch.setattr(net, "_try_proxy_post", lambda *a, **k: None)
     return fake_transport
 
 
@@ -145,20 +152,33 @@ def test_exa_ohne_key_uebersprungen(monkeypatch, capsys):
 
 
 def test_register_enthaelt_neue_quellen():
-    """WEB-Register: Mojeek + Wikipedia + Exa sind drin."""
-    for name in ("ddgs", "bing", "mojeek", "wikipedia", "exa", "tavily", "serpapi"):
+    """WEB-Register: Mojeek + Wikipedia_web + Exa sind drin."""
+    for name in ("ddgs", "bing", "mojeek", "wikipedia_web", "exa", "tavily",
+                 "serpapi", "hn", "google_news", "bing_news"):
         assert name in web.WEB, f"{name} fehlt im Register"
 
 
 def test_web_suche_kein_exit_hang(tmp_path):
-    """search_web darf den Prozess nicht am Exit hindern (F1 auch für Web)."""
+    """search_web darf den Prozess nicht am Exit hindern (F1 auch für Web).
+
+    F10 (OpenCode-Block5): Netz wird im Subprozess GEMOCKT (FakeTransport
+    offline) — der Test prüft den Exit-Hang, nicht echte Suchergebnisse.
+    Vorher ging der Test ins echte Netz (10 echte Requests in der
+    Offline-Suite), obwohl README „Netz gemockt" verspricht.
+    """
     REPO = Path(__file__).resolve().parents[1]
     env = dict(os.environ, SUCHER_HEALTH_FILE=str(tmp_path / "h_hang.json"),
                SUCHER_CACHE_DB=str(tmp_path / "c_hang.db"))
     code = """
 import sys; sys.path.insert(0, 'src')
+import net
+class FT:  # FakeTransport: jede URL schlägt sofort fehl (kein Netz)
+    def open(self, url, timeout=8, headers=None):
+        raise ConnectionError('fake offline')
+net._transport = FT()
+net._try_proxy = lambda *a, **k: None
+net._try_proxy_post = lambda *a, **k: None
 import sucher_web as w
-# ddgs + bing sind langsam/genetzt — mit timeout=2 muss search_web schnell enden
 res = w.search_web('kurzer test', 3, timeout=2)
 print('FERTIG', len(res))
 """

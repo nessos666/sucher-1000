@@ -172,3 +172,62 @@ def test_fanout_liefert_hn_treffer(route_net):
     res = web.search_web("python", 5, only="hn")
     assert any(r["source"] == "HackerNews" for r in res), \
         f"HN-Treffer durch Fanout: {res}"
+
+
+# --- F1 (OpenCode-Block5): Feed mit Query-Wort im Titel ist KEIN Block ---
+
+def test_feed_mit_captcha_im_titel_kein_block():
+    """Query 'captcha' → Feed-Titel enthält 'captcha' → darf NICHT als Block
+    killen (F1: body-weite Marker erkannten legitime Inhalte als Botwall)."""
+    import net
+    feed = GOOGLE_NEWS_RSS.replace("Open AI: Was beim Angriff auf Hugging Face geschah - SZ.de",
+                                   "captcha-Loesung: Wie funktioniert ein Captcha? - SZ.de")
+    grund = net.block_indicator(feed.encode(), erwartet="text")
+    assert grund is None, f"RSS-Feed mit 'captcha' im Titel ist KEIN Block: {grund}"
+
+
+def test_google_news_captcha_query_liefert_treffer(route_net):
+    """q_google_news('captcha') → Feed-Titel echoed 'captcha' → Treffer, kein []."""
+    route_net.route("https://news.google.com/rss/search",
+                    route_net.ok_html(GOOGLE_NEWS_RSS.replace(
+                        "Open AI", "captcha: Was ist ein Captcha")))
+    out = web.q_google_news("captcha", 5)
+    assert len(out) == 2, f"Feed darf nicht als Block killen: {out}"
+
+
+# --- F12 (OpenCode-Block5): google_news/bing_news durch Fanout+Cache+Health ---
+
+def test_fanout_liefert_google_news_treffer(route_net):
+    """search_web only=google_news → Treffer + Health ok (kein Fehl-Fail)."""
+    import health
+    route_net.route("https://news.google.com/rss/search",
+                    route_net.ok_html(GOOGLE_NEWS_RSS))
+    res = web.search_web("ki agenten", 5, only="google_news")
+    assert any(r["source"] == "GoogleNews" for r in res), \
+        f"GoogleNews-Treffer durch Fanout: {res}"
+    reg = health.HealthRegistry()
+    assert reg.status("google_news")["state"] == "HEALTHY", \
+        "gesunde Quelle darf nicht als Fehler verbucht werden"
+
+
+def test_fanout_liefert_bing_news_treffer(route_net):
+    """search_web only=bing_news → Treffer + Health ok."""
+    import health
+    route_net.route("https://www.bing.com/news/search",
+                    route_net.ok_html(BING_NEWS_RSS))
+    res = web.search_web("ki agenten", 5, only="bing_news")
+    assert any(r["source"] == "BingNews" for r in res), \
+        f"BingNews-Treffer durch Fanout: {res}"
+    reg = health.HealthRegistry()
+    assert reg.status("bing_news")["state"] == "HEALTHY", \
+        "gesunde Quelle darf nicht als Fehler verbucht werden"
+
+
+def test_fanout_bing_news_fehler_degradiert_health(route_net):
+    """bing_news-Fehler durch Fanout → Health NICHT healthy (ok=False)."""
+    import health
+    route_net.route("https://www.bing.com/news/search", exc=route_net.err(500))
+    web.search_web("ki", 5, only="bing_news")
+    reg = health.HealthRegistry()
+    assert reg.status("bing_news")["state"] != "HEALTHY", \
+        "Quelle mit 500 darf nicht healthy sein"
