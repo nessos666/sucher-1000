@@ -58,9 +58,9 @@ def ensure_src_imports():
 def main():
     ap = argparse.ArgumentParser(description="SUCHER 1000 — großes Studien-Tool")
     ap.add_argument("query", nargs="?", help="Suchbegriff")
-    ap.add_argument("n", nargs="?", type=int, default=8,
-                    help="Anzahl PRO QUELLE (default 8) — bei 24 Web-Quellen "
-                         "also bis zu ~192 Treffer; kleiner wählen für wenige")
+    ap.add_argument("n", nargs="?", type=int, default=12,
+                    help="Anzahl PRO QUELLE (default 12) — mehr = tiefere Treffer; "
+                         "kleiner wählen für wenige")
     ap.add_argument("--modus", default="universal", help="studien|universal|alle|web")
     ap.add_argument("--quelle", default=None, help="Nur EINE Quelle (z. B. pubmed, arxiv, ddgs, github)")
     ap.add_argument("--out", default=DEFAULT_OUT, help="Zielordner")
@@ -187,6 +187,20 @@ def _suche(args):
         print("  Keine Treffer — Netzwerk/Quellen gerade evtl. instabil (560/429).")
         log("Suche: 0 Treffer (Quellen evtl. down)", "WARN")
         return
+    # Transparenz (David): X von Y Quellen lieferten — zeigt, dass leere
+    # Spezial-Quellen (GitHub bei "Hausmeister") absichtlich leer sind, kein Bug
+    try:
+        if args.modus == "web":
+            diag = sw.web_diagnose()
+        else:
+            diag = su.diagnose()
+        geliefert, aktiv = diag.get("geliefert", 0), diag.get("aktiv", 0)
+        if aktiv:
+            rest = aktiv - geliefert
+            zusatz = f" — {rest} Quellen hatten dazu keine Treffer (normal bei Spezial-Quellen)" if rest else ""
+            print(f"  ℹ {geliefert} von {aktiv} Quellen lieferten Treffer{zusatz}")
+    except Exception:  # noqa: S110 - Diagnose optional
+        pass
     su.pretty(results, args.modus)
     print(f"  → {len(results)} Treffer\n")
 

@@ -49,6 +49,14 @@ UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Fi
 _WEB_FEHLER: dict = {}
 _WEB_FEHLER_LOCK = threading.Lock()
 
+# Transparenz-Diagnose der letzten Suche (X von Y Quellen lieferten)
+_letzte_web_diagnose: dict = {"geliefert": 0, "aktiv": 0, "abgeschlossen": 0}
+
+
+def web_diagnose():
+    """Diagnose der letzten search_web: {geliefert, aktiv, abgeschlossen}."""
+    return dict(_letzte_web_diagnose)
+
 def _env(name):
     """Key aus Env lesen (auch ~/.hermes/.env + ~/.config/sucher1000/keys.env).
 
@@ -1380,6 +1388,14 @@ def search_web(query, n=8, only=None, timeout=30, health_reg=None):
         except Exception:  # noqa: S110 - bewusster Fallback (optional)
             pass
     # P6-B3: deterministisch sortieren (Gewicht + Titel) statt completion-order
+    # Transparenz (David): merken wie viele Quellen geliefert haben vs. aktiv
+    # waren — CLI/pretty zeigt "X von Y Quellen lieferten Treffer".
+    try:
+        _letzte_web_diagnose["geliefert"] = len(quellen_mit_treffern)
+        _letzte_web_diagnose["aktiv"] = len(active)
+        _letzte_web_diagnose["abgeschlossen"] = len(quellen_abgeschlossen)
+    except Exception:  # noqa: S110 - Diagnose optional
+        pass
     return _web_score_sort(results)
 
 def list_web():

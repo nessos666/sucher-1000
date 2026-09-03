@@ -25,6 +25,14 @@ os.makedirs(OUTDIR, exist_ok=True)
 _QUELLEN_FEHLER: dict = {}   # quelle -> (letzter Fehler, anzahl)
 _QUELLEN_FEHLER_LOCK = threading.Lock()  # F5/OpenCode: atomarer Zugriff aus Threads
 
+# Transparenz-Diagnose der letzten Suche (X von Y Quellen lieferten)
+_letzte_diagnose: dict = {"geliefert": 0, "aktiv": 0, "abgeschlossen": 0}
+
+
+def diagnose():
+    """Diagnose der letzten search(): {geliefert, aktiv, abgeschlossen}."""
+    return dict(_letzte_diagnose)
+
 def _log_quellenfehler(quelle, exc):
     """Quellen-Fehler sichtbar machen: sammeln + auf stderr ausgeben.
 
@@ -811,6 +819,13 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
         results.sort(key=lambda r: (_to_int(r.get("year")) or 0) if r.get("year") else 0, reverse=True)
     if budget_ueberschritten:
         print(f"  ⚠ Gesamtbudget ({budget_s}s) überschritten — Teilergebnis ({len(results)} Treffer)", file=sys.stderr)
+    # Transparenz (David): wie viele Quellen lieferten vs. aktiv waren
+    try:
+        _letzte_diagnose["geliefert"] = len(quellen_mit_treffern)
+        _letzte_diagnose["aktiv"] = len(set(n for n, _, _ in tasks))
+        _letzte_diagnose["abgeschlossen"] = len(quellen_abgeschlossen)
+    except Exception:  # noqa: S110 - Diagnose optional
+        pass
     return results
 
 
