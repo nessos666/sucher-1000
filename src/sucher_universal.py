@@ -362,8 +362,9 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                 ergebnis_q.put((name, "ok" if not hatte_fehler else "err_lokal",
                                 payload, hatte_fehler))
             except Exception as e:
-                _log_quellenfehler(name, e)
-                ergebnis_q.put((name, "err", [], True))
+                # Fehlertext direkt mitschicken — der Main-Loop loggt GENAU EINMAL
+                # (Doppel-Log würde den Text mit leerem payload überschreiben)
+                ergebnis_q.put((name, "err", str(e), True))
         t = _t.Thread(target=_run, daemon=True)
         t.start()
         threads.append(t)
@@ -383,8 +384,11 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                     key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
                     if key and key not in seen:
                         seen.add(key); results.append(it)
-            else:
+            elif status == "err":
+                # Echte Exception — hier loggen (Worker schickt den Text mit)
                 _log_quellenfehler(name, payload)
+            # status == "err_lokal": q_*-Funktion loggte selbst via _check_fehler
+            # → hier NICHT nochmal loggen (würde Text mit leerem payload überschreiben)
             if hatte_fehler and name not in quellen_mit_treffern:
                 # Fehlertext aus dem Lauf-Register (nur wenn dieser Lauf ihn setzte)
                 with _QUELLEN_FEHLER_LOCK:
