@@ -362,8 +362,25 @@ def search_web(query, n=8, only=None, timeout=30):
                 ratelimit.throttle(_n)
             except Exception:
                 pass
+            # TTL-Cache: gleiche (Quelle, Query, n) binnen 15 Min aus Cache
             try:
-                ergebnis_q.put((_n, _f(query, n)))
+                import cache as _cache
+                treffer = _cache.get(_n, query, n)
+                if treffer is not None:
+                    ergebnis_q.put((_n, treffer))
+                    return
+            except Exception:
+                pass
+            try:
+                ergebnis = list(_f(query, n))
+                # Cache füllen (nur echte Ergebnisse)
+                if ergebnis:
+                    try:
+                        import cache as _cache
+                        _cache.put(_n, query, n, ergebnis)
+                    except Exception:
+                        pass
+                ergebnis_q.put((_n, ergebnis))
             except Exception as e:
                 _log_web_error(_n, e)
                 ergebnis_q.put((_n, []))

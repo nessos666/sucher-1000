@@ -71,6 +71,14 @@ def health_auf_tmp(tmp_path, monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def cache_auf_tmp(tmp_path, monkeypatch):
+    """TTL-Cache (Shiraberu): Tests dürfen nie in die echte sucher_cache.db schreiben."""
+    import cache
+    monkeypatch.setattr(cache, "DEFAULT_CACHE_DB", tmp_path / "cache_test.db")
+    yield
+
+
 @pytest.fixture
 def unique_db_path(tmp_path):
     """Eindeutiger SQLite-Pfad je Test (Skill-Pitfall #13/#20)."""

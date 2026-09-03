@@ -361,6 +361,16 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                 ratelimit.throttle(name)
             except Exception:
                 pass
+            # TTL-Cache (Shiraberu): gleiche (Quelle, Query, n) binnen 15 Min
+            # kommt aus dem Cache statt das Netz zu fragen
+            try:
+                import cache as _cache
+                treffer = _cache.get(name, qy, n)
+                if treffer is not None:
+                    ergebnis_q.put((name, "ok", treffer, False))
+                    return
+            except Exception:
+                pass
             # F6 (OpenCode): Fehler-Zählerstand VOR dem Aufruf merken — der
             # Worker meldet seinen EIGENEN Fehlerstatus im Tupel mit, statt dass
             # der Health-Commit das globale Register liest (das verwaiste
@@ -372,6 +382,13 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                 with _QUELLEN_FEHLER_LOCK:
                     nachher = _QUELLEN_FEHLER.get(name, (None, 0))[1]
                 hatte_fehler = nachher > vorher
+                # Cache füllen (nur echte Ergebnisse, keine Fehler/leer-Timeout)
+                if payload and not hatte_fehler:
+                    try:
+                        import cache as _cache
+                        _cache.put(name, qy, n, payload)
+                    except Exception:
+                        pass
                 ergebnis_q.put((name, "ok" if not hatte_fehler else "err_lokal",
                                 payload, hatte_fehler))
             except Exception as e:
