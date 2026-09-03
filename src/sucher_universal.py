@@ -401,20 +401,19 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
 
     # Ergebnisse einsammeln bis Budget abläuft oder alle fertig sind
     offen = len(tasks)
+    quellen_mit_treffern = set()
     while offen > 0 and _time.monotonic() - t_start < budget_s:
         try:
             name, status, payload = ergebnis_q.get(timeout=0.2)
             offen -= 1
             if status == "ok":
-                if _reg is not None:
-                    _reg.record_outcome(name, ok=True, latency_ms=0)
+                if payload:
+                    quellen_mit_treffern.add(name)
                 for it in payload:
                     key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
                     if key and key not in seen:
                         seen.add(key); results.append(it)
             else:
-                if _reg is not None:
-                    _reg.record_outcome(name, ok=False, error=str(payload))
                 _log_quellenfehler(name, payload)
         except _queue.Empty:
             continue  # noch keine Antwort — weiter auf Budget warten
@@ -422,8 +421,24 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     if offen > 0:
         budget_ueberschritten = True
         # Verwaiste Threads NICHT joinen — daemon, sterben mit Prozess (F1)
+
+    # P4-Fix (Codex-Review): Health PRO QUELLE aggregieren, genau EINMAL nach
+    # dem Fanout committen — nicht pro (Quelle × Variante):
+    #   - Quelle hat Treffer geliefert ODER keinen Fehler geloggt → ok
+    #   - Quelle steht im Fehlerregister UND keine Variante lieferte Treffer → Fehler
+    # Das verhindert: (a) _error-Fehler als HEALTHY (alter Bug), (b) 3 Varianten =
+    # 3 consecutive fails → zu schnelles BROKEN, (c) Completion-Order-Abhängigkeit.
     if _reg is not None:
         try:
+            aktive_quellen = {name for name, _fn, _qy in tasks}
+            for name in aktive_quellen:
+                fehlerinfo = _QUELLEN_FEHLER.get(name)
+                hat_fehler = fehlerinfo is not None and fehlerinfo[1] > 0
+                fehlertext = fehlerinfo[0] if fehlerinfo else ""
+                if hat_fehler and name not in quellen_mit_treffern:
+                    _reg.record_outcome(name, ok=False, error=fehlertext)
+                else:
+                    _reg.record_outcome(name, ok=True)
             _reg.save()
         except Exception:
             pass
