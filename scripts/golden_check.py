@@ -195,10 +195,11 @@ def main():
     if as_json:
         print(json.dumps(ergebnisse, ensure_ascii=False, indent=2))
 
-    # Report schreiben
+    # Report schreiben — gefilterte Läufe überschreiben den Haupt-Report nicht
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     from datetime import datetime
-    fn = REPORT_DIR / f"golden_check_{datetime.now():%Y%m%d}.md"
+    suffix = f"_{only_filter}" if only_filter else ""
+    fn = REPORT_DIR / f"golden_check_{datetime.now():%Y%m%d}{suffix}.md"
     lines = [f"# Golden-Query-Check — {datetime.now():%Y-%m-%d %H:%M}\n",
              f"\n{ok_zahl}/{len(ergebnisse)} Queries erfüllten die Erwartung "
              f"({gesamt:.0f}s).\n", "\n| Query | Modus | Treffer | Erwartung | Status |\n",
