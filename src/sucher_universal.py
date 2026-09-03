@@ -15,6 +15,23 @@ UA = {"User-Agent": "Sucher1000/ (mailto:kontakt@sucher1000.example)"}
 OUTDIR = "sucher_ergebnisse"
 os.makedirs(OUTDIR, exist_ok=True)
 
+# ---------- Fehler-Sichtbarkeit (P1): nie still schlucken ----------
+_QUELLEN_FEHLER = {}   # quelle -> (letzter Fehler, anzahl)
+
+def _log_quellenfehler(quelle, exc):
+    """Quellen-Fehler sichtbar machen: sammeln + auf stderr ausgeben.
+
+    Ersetzt stille `except: pass` — der Lauf läuft weiter, aber der Fehler
+    ist dokumentiert und am Ende der Suche abrufbar (search() -> diagnostics).
+    """
+    msg = str(exc)[:120]
+    _QUELLEN_FEHLER[quelle] = (msg, _QUELLEN_FEHLER.get(quelle, (None, 0))[1] + 1)
+    print(f"  ⚠ [{quelle}] Fehler: {msg}", file=sys.stderr)
+
+def _get_quellen_fehler():
+    """Diagnose: welche Quellen sind fehlgeschlagen und warum."""
+    return {q: (m, n) for q, (m, n) in _QUELLEN_FEHLER.items() if n > 0}
+
 def http_json(url, timeout=25, retries=2):
     for i in range(retries+1):
         try:
@@ -148,7 +165,8 @@ def q_arxiv(query, n=6):
         req = urllib.request.Request(url, headers=UA)
         with urllib.request.urlopen(req, timeout=30) as r:
             xml = r.read().decode()
-    except Exception:
+    except Exception as e:
+        _log_quellenfehler("arxiv", e)
         return []
     out = []
     for e in re.findall(r"<entry>.*?</entry>", xml, re.S):
@@ -171,7 +189,8 @@ def q_biorxiv(query, n=6):
         req = urllib.request.Request(url, headers={"User-Agent":"Sucher1000/ (mailto:kontakt@sucher1000.example)"})
         with urllib.request.urlopen(req, timeout=30) as r:
             j = json.load(r)
-    except Exception:
+    except Exception as e:
+        _log_quellenfehler("biorxiv", e)
         return []
     out=[]
     for p in j.get("collection", [])[:n]:
@@ -218,7 +237,8 @@ def q_base(query, n=6):
         req = urllib.request.Request(url, headers={"User-Agent":"Sucher1000/ (mailto:kontakt@sucher1000.example)"})
         with urllib.request.urlopen(req, timeout=30) as r:
             j = json.load(r)
-    except Exception:
+    except Exception as e:
+        _log_quellenfehler("base", e)
         return []
     out=[]
     res = j.get("response") or {}
@@ -285,7 +305,13 @@ def resolve_sources(mode):
 
 def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False, sort_by="relevance", expand=True):
     active = resolve_sources(mode)
-    if only and only in active: active = {only: active[only]}
+    if only:
+        if only in active:
+            active = {only: active[only]}
+        else:
+            # Unbekannte Quelle: Meldung statt still ALLE Quellen zu durchsuchen
+            print(f"  ⚠ Unbekannte Quelle '{only}' — verfügbar: {', '.join(active.keys())}", file=sys.stderr)
+            return []
     # --- Query-Expansion: engli/DE + Basis ---
     queries = _expand_query(query) if expand else [query]
     seen, results = set(), []
@@ -296,8 +322,8 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
                     key = ((it.get("title") or "") + (it.get("url") or "")).lower()[:90]
                     if key and key not in seen:
                         seen.add(key); results.append(it)
-            except Exception:
-                pass
+            except Exception as e:
+                _log_quellenfehler(name, e)
     # --- Filter: min_year ---
     if min_year:
         results = [r for r in results if _ok_year(r.get("year"), min_year)]
@@ -381,6 +407,12 @@ def pretty(results, mode):
         if r.get("pmcid"): print(f"      PMC: https://pmc.ncbi.nlm.nih.gov/articles/{r['pmcid']}/")
         if r.get("url") and r.get("source")!="OpenAlex": print(f"      Link: {r['url']}")
         print()
+    # Quellen-Fehler am Ende sichtbar machen (P1)
+    fehler = _get_quellen_fehler()
+    if fehler:
+        print("⚠ Quellen-Fehler (diese Quellen lieferten nichts):")
+        for q, (m, n) in fehler.items():
+            print(f"   - {q}: {m} ({n}×)")
 
 def main():
     argv = sys.argv[1:]
