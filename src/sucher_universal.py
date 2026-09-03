@@ -223,15 +223,17 @@ def q_pubmed(query, n=6):
     return out
 
 def q_base(query, n=6):
-    """BASE (Bielefeld Academic Search Engine): große Open-Access-Suchmaschine."""
+    """BASE (Bielefeld Academic Search Engine): große Open-Access-Suchmaschine.
+
+    F3 (Codex): nutzt die zentrale Transport-Härtung (http_json → net.get_json)
+    statt direktem urllib mit 30s-Timeout — 8s-Limit, Block-Erkennung, Retry,
+    Proxy-Fallback greifen jetzt auch hier.
+    """
     url = "https://www.base-search.net/Search/Results?" + urllib.parse.urlencode(
         {"lookfor":query,"format":"json","n":n})
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent":"Sucher1000/ (mailto:kontakt@sucher1000.example)"})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            j = json.load(r)
-    except Exception as e:
-        _log_quellenfehler("base", e)
+    j = http_json(url, timeout=8)
+    if "_error" in j:
+        _log_quellenfehler("base", j["_error"])
         return []
     out=[]
     res = j.get("response") or {}
@@ -312,6 +314,10 @@ def search(query, n=8, mode="universal", only=None, min_year=None, oa_only=False
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import time as _time
+
+    # F5 (Codex): Fehlerregister pro Lauf — alte Fehler dürfen nicht in neue Suche
+    # hineinwirken (vorher: global, nie zurückgesetzt → falsche Diagnosen)
+    _QUELLEN_FEHLER.clear()
 
     active = resolve_sources(mode)
     if only:

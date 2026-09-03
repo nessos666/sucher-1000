@@ -57,34 +57,42 @@ def main():
 
     ergebnisse = []
     if not only_web:
-        print(f"Health-Check SUCHER-1000 (Query: {QUERY!r}, n={N}) — {datetime.now():%H:%M:%S}\n")
         for grp, srcs in (("WISSENSCHAFT", akad), ("ALLGEMEIN", general)):
-            print(f"== {grp} ==")
             for name, fn in srcs.items():
-                r = _measure(name, fn)
-                ergebnisse.append(r)
-                f = r["fehler"] or ""
-                print(f"  [{r['status']:11s}] {name:15s} {r['treffer']:2d} Treffer "
-                      f"{r['latenz_s']:>5.1f}s{f'  {f}' if f else ''}")
-        print("\n== LOKAL (Offline-Rettungsanker) ==")
-        r = _measure("lokal", su.GENERAL["lokal"])
-        ergebnisse.append(r)
-        print(f"  [{r['status']:11s}] {r['quelle']:15s} {r['treffer']:2d} Treffer {r['latenz_s']:>5.1f}s")
-        print()
-    else:
-        print(f"Health-Check WEB-BÜNDEL (Query: {QUERY!r}, n={N}) — {datetime.now():%H:%M:%S}\n")
-
-    print("== WEB-BÜNDEL ==")
+                ergebnisse.append(_measure(name, fn))
+        ergebnisse.append(_measure("lokal", su.GENERAL["lokal"]))
     for name, fn in web.items():
-        r = _measure(name, fn)
-        ergebnisse.append(r)
-        f = r["fehler"] or ""
-        print(f"  [{r['status']:11s}] {name:10s} {r['treffer']:2d} Treffer "
-              f"{r['latenz_s']:>5.1f}s{f'  {f}' if f else ''}")
+        ergebnisse.append(_measure(name, fn))
 
+    # F4 (Codex): --json muss AUSSCHLIESSLICH gültiges JSON auf stdout geben.
     if as_json:
         print(json.dumps(ergebnisse, ensure_ascii=False, indent=2))
         return
+
+    # Text-/Report-Modus: erst jetzt die menschenlesbare Ausgabe
+    print(f"Health-Check SUCHER-1000 (Query: {QUERY!r}, n={N}) — {datetime.now():%H:%M:%S}\n")
+    if not only_web:
+        for grp, names in (("WISSENSCHAFT", list(akad)), ("ALLGEMEIN", list(general))):
+            print(f"== {grp} ==")
+            for name in names:
+                r = next((x for x in ergebnisse if x["quelle"] == name), None)
+                if not r: continue
+                f = r["fehler"] or ""
+                print(f"  [{r['status']:11s}] {name:15s} {r['treffer']:2d} Treffer "
+                      f"{r['latenz_s']:>5.1f}s{f'  {f}' if f else ''}")
+        r = next((x for x in ergebnisse if x["quelle"] == "lokal"), None)
+        if r:
+            print(f"\n== LOKAL (Offline-Rettungsanker) ==")
+            print(f"  [{r['status']:11s}] {r['quelle']:15s} {r['treffer']:2d} Treffer {r['latenz_s']:>5.1f}s")
+        print()
+
+    print("== WEB-BÜNDEL ==")
+    for name in web:
+        r = next((x for x in ergebnisse if x["quelle"] == name), None)
+        if not r: continue
+        f = r["fehler"] or ""
+        print(f"  [{r['status']:11s}] {name:10s} {r['treffer']:2d} Treffer "
+              f"{r['latenz_s']:>5.1f}s{f'  {f}' if f else ''}")
 
     # Report schreiben
     outdir = os.path.join(BASE, "docs", "audits")

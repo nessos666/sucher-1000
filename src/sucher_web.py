@@ -96,7 +96,7 @@ def q_bing_html(query, n=8):
 def q_tavily(query, n=8):
     key = _env("TAVILY_API_KEY")
     if not key:
-        print("  ⚠ [Tavily] übersprungen (kein TAVILY_API_KEY in Env)")
+        print("  ⚠ [Tavily] übersprungen (kein TAVILY_API_KEY in Env)", file=sys.stderr)
         return []
     out = []
     try:
@@ -119,7 +119,7 @@ def q_tavily(query, n=8):
 def q_serpapi(query, n=8):
     key = _env("SERPAPI_API_KEY") or _env("SERPER_API_KEY")
     if not key:
-        print("  ⚠ [SerpApi] übersprungen (kein SERPAPI_API_KEY in Env)")
+        print("  ⚠ [SerpApi] übersprungen (kein SERPAPI_API_KEY in Env)", file=sys.stderr)
         return []
     out = []
     try:
@@ -144,13 +144,22 @@ def search_web(query, n=8, only=None, timeout=30):
     """Alle Web-Quellen PARALLEL durchsuchen, aus allen sammeln.
 
     Parallele Ausführung → Gesamtzeit = langsamste Quelle, nicht Summe.
+    Timeout HART: nach timeout-Sekunden wird abgebrochen, Teilergebnisse bleiben
+    (F1 — Executor ohne Kontextmanager, shutdown(wait=False)).
     """
     active = dict(WEB)
-    if only and only in active:
-        active = {only: active[only]}
+    if only:
+        if only in active:
+            active = {only: active[only]}
+        else:
+            # Unbekannte Web-Quelle: Meldung statt still ALLE durchsuchen (F6)
+            print(f"  ⚠ Unbekannte Web-Quelle '{only}' — verfügbar: {', '.join(active.keys())}",
+                  file=sys.stderr)
+            return []
     results, seen = [], set()
-    with ThreadPoolExecutor(max_workers=len(active)) as ex:
-        futs = {ex.submit(fn, query, n): name for name, fn in active.items()}
+    ex = ThreadPoolExecutor(max_workers=min(8, len(active)))
+    futs = {ex.submit(fn, query, n): name for name, fn in active.items()}
+    try:
         try:
             for fut in as_completed(futs, timeout=timeout):
                 try:
@@ -162,6 +171,9 @@ def search_web(query, n=8, only=None, timeout=30):
                     _log_web_error(futs[fut], e)
         except Exception as e:
             _log_web_error("Parallel", f"Timeout nach {timeout}s: {e}")
+    finally:
+        # wait=False: search_web kehrt sofort zurück, hängende Threads blockieren nicht (F1)
+        ex.shutdown(wait=False, cancel_futures=True)
     return results
 
 def list_web():

@@ -58,20 +58,30 @@ def _open(url: str, timeout: int = TIMEOUT_S):
 def block_indicator(body, erwartet="json"):
     """Erkennt Block-/Botwall-Antworten.
 
-    - erwartet="json": Body muss JSON sein; HTML/Captcha = Block
+    - erwartet="json": Body muss JSON sein; HTML/Captcha = Block.
+      Prüfung über ECHTEN json.loads-Versuch (nicht Präfixe) — gültige
+      JSON-Skalare (true/false/null/123/"ok") gelten nicht als Block (F7).
     - erwartet="text": Body darf HTML sein; Captcha-Marker = Block
     Gibt den Grund zurück (str) oder None wenn kein Block.
     """
     if isinstance(body, bytes):
-        probe = body[:4000].decode("utf-8", "ignore").lower()
+        probe_text = body.decode("utf-8", "ignore")
+        probe = probe_text[:4000].lower()
     else:
-        probe = str(body)[:4000].lower()
+        probe_text = str(body)
+        probe = probe_text[:4000].lower()
 
     if erwartet == "json":
-        # JSON anfordern, aber HTML bekommen → Block (BASE-Anubis-Falle!)
-        stripped = probe.lstrip()
-        if stripped and not stripped.startswith(("{", "[")):
-            return f"FORMAT: JSON erwartet, bekam HTML/Captcha ({len(body)} Bytes)"
+        # JSON anfordern: echter Parse-Versuch. Gültiges JSON (auch Skalare) = ok.
+        try:
+            import json as _json
+            _json.loads(probe_text)
+            return None  # echtes JSON — kein Block, egal welche Marker drin sind
+        except Exception:
+            # Kein JSON → prüfen ob HTML/Bot-Marker (dann Block) oder nur leeres/anders
+            stripped = probe_text.lstrip()
+            if stripped and not stripped.startswith(("{", "[")):
+                return f"FORMAT: JSON erwartet, bekam Nicht-JSON ({len(body)} Bytes)"
     m = _BLOCK_MARKER.search(probe)
     if m:
         return f"BLOCK: '{m.group(0)}'"
@@ -129,7 +139,7 @@ def get_text(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
             if grund:
                 last = grund
                 if proxy_retry and i == 0:
-                    proxied = _try_proxy(url, timeout)
+                    proxied = _try_proxy(url, timeout, erwartet="text")
                     if proxied is not None:
                         return proxied, None
                 continue
@@ -137,7 +147,7 @@ def get_text(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
         except urllib.error.HTTPError as e:
             last = f"HTTP {e.code}"
             if proxy_retry and i == 0 and e.code in (403, 429):
-                proxied = _try_proxy(url, timeout)
+                proxied = _try_proxy(url, timeout, erwartet="text")
                 if proxied is not None:
                     return proxied, None
         except Exception as e:
@@ -148,10 +158,14 @@ def get_text(url, timeout=TIMEOUT_S, retries=RETRIES, proxy_retry=True):
     return "", last or "timeout"
 
 
-def _try_proxy(url, timeout):
-    """1× identischer Request über DataImpulse-Proxy (neue IP). None wenn kein Proxy."""
+def _try_proxy(url, timeout, erwartet="json"):
+    """1× identischer Request über DataImpulse-Proxy (neue IP). None wenn kein Proxy.
+
+    erwartet wird an proxy.fetch durchgereicht: "json" parst JSON,
+    "text" gibt den HTML-Body zurück (F2 — vorher immer json → Text-Pfad kaputt).
+    """
     try:
         import proxy
-        return proxy.fetch(url, timeout=timeout, erwartet="json")
+        return proxy.fetch(url, timeout=timeout, erwartet=erwartet)
     except Exception:
         return None
