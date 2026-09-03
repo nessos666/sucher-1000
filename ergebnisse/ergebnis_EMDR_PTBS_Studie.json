@@ -1,0 +1,66 @@
+[
+  {
+    "title": "[Personalized psychotherapy of posttraumatic stress disorder : Overview on the selection of treatment methods and techniques using statistical procedures].",
+    "year": "2023",
+    "venue": "Der Nervenarzt",
+    "is_oa": "Y",
+    "pdf": "https://link.springer.com/content/pdf/10.1007/s00115-023-01549-6.pdf",
+    "doi": "10.1007/s00115-023-01549-6",
+    "source": "EuropePMC",
+    "pmcid": "PMC10620257",
+    "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10620257/"
+  },
+  {
+    "title": "[Digital health applications for the treatment of posttraumatic stress disorder : Current state, opportunities, and challenges].",
+    "year": "2025",
+    "venue": "Der Nervenarzt",
+    "is_oa": "Y",
+    "pdf": "https://europepmc.org/articles/PMC12411571",
+    "doi": "10.1007/s00115-025-01866-y",
+    "source": "EuropePMC",
+    "pmcid": "PMC12411571",
+    "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12411571/"
+  },
+  {
+    "title": "Selbstmanagement mit EMDR",
+    "year": 2016,
+    "venue": "EMDR in der Psychotherapie der PTBS",
+    "is_oa": false,
+    "pdf": null,
+    "doi": "10.1007/978-3-662-47893-6_8",
+    "source": "Crossref",
+    "url": "https://doi.org/10.1007/978-3-662-47893-6_8"
+  },
+  {
+    "title": "Häufige Komorbiditäten der PTBS",
+    "year": 2016,
+    "venue": "EMDR in der Psychotherapie der PTBS",
+    "is_oa": false,
+    "pdf": null,
+    "doi": "10.1007/978-3-662-47893-6_7",
+    "source": "Crossref",
+    "url": "https://doi.org/10.1007/978-3-662-47893-6_7"
+  },
+  {
+    "title": "The 87-Sr optical frequency standard at PTB",
+    "year": null,
+    "venue": "arXiv",
+    "is_oa": true,
+    "pdf": null,
+    "doi": null,
+    "source": "arXiv",
+    "url": "https://arxiv.org/abs/1104.4850v2",
+    "snippet": "With 87-Sr atoms confined in a one dimensional optical lattice, the frequency of the optical clock transition 5s^2 ^1S_0 - 5s5p ^3P_0 has been determi"
+  },
+  {
+    "title": "Distributed cavity phase frequency shifts of the caesium fountain PTB-CSF2",
+    "year": null,
+    "venue": "arXiv",
+    "is_oa": true,
+    "pdf": null,
+    "doi": null,
+    "source": "arXiv",
+    "url": "https://arxiv.org/abs/1110.2590v1",
+    "snippet": "We evaluate the frequency error from distributed cavity phase in the caesium fountain clock PTB-CSF2 at the Physikalisch-Technische Bundesanstalt with"
+  }
+]

@@ -1,0 +1,90 @@
+[
+  {
+    "title": "Freshwater biodiversity conservation: recent progress and future challenges",
+    "year": 2010,
+    "venue": "Journal of the North American Benthological Society",
+    "is_oa": true,
+    "pdf": "https://bioone.org/journals/journal-of-the-north-american-benthological-society/volume-29/issue-1/08-171.1/Freshwater-biodiversity-conservation-recent-progress-and-future-challenges/10.1899/08-171.1.pdf",
+    "doi": "https://doi.org/10.1899/08-171.1",
+    "source": "OpenAlex",
+    "url": "https://doi.org/10.1899/08-171.1",
+    "cites": 1751,
+    "relevance": 90.33744
+  },
+  {
+    "title": "TRAIL Modulates the Immune System and Protects against the Development of Diabetes",
+    "year": 2015,
+    "venue": "Journal of Immunology Research",
+    "is_oa": true,
+    "pdf": "https://downloads.hindawi.com/journals/jir/2015/680749.pdf",
+    "doi": "https://doi.org/10.1155/2015/680749",
+    "source": "OpenAlex",
+    "url": "https://doi.org/10.1155/2015/680749",
+    "cites": 50,
+    "relevance": 84.36127
+  },
+  {
+    "title": "Seeing life in the teeming world: animacy perception in arthropods.",
+    "year": "2024",
+    "venue": "Frontiers in psychology",
+    "is_oa": "Y",
+    "pdf": "https://doi.org/10.3389/fpsyg.2024.1492239",
+    "doi": "10.3389/fpsyg.2024.1492239",
+    "source": "EuropePMC",
+    "pmcid": "PMC11617153",
+    "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11617153/"
+  },
+  {
+    "title": "Olfaction and Executive Cognitive Performance: A Systematic Review.",
+    "year": "2022",
+    "venue": "Frontiers in psychology",
+    "is_oa": "Y",
+    "pdf": "https://europepmc.org/articles/PMC9125097",
+    "doi": "10.3389/fpsyg.2022.871391",
+    "source": "EuropePMC",
+    "pmcid": "PMC9125097",
+    "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9125097/"
+  },
+  {
+    "title": "Risk Reduction Using Trailing Stop-Loss Rules",
+    "year": 2019,
+    "venue": "SSRN Electronic Journal",
+    "is_oa": false,
+    "pdf": null,
+    "doi": "10.2139/ssrn.3338243",
+    "source": "Crossref",
+    "url": "https://doi.org/10.2139/ssrn.3338243"
+  },
+  {
+    "title": "Equity Returns with a Trailing Stop-Loss",
+    "year": 2026,
+    "venue": "",
+    "is_oa": false,
+    "pdf": null,
+    "doi": "10.2139/ssrn.6873002",
+    "source": "Crossref",
+    "url": "https://doi.org/10.2139/ssrn.6873002"
+  },
+  {
+    "title": "Optimal Trading with a Trailing Stop",
+    "year": null,
+    "venue": "arXiv",
+    "is_oa": true,
+    "pdf": null,
+    "doi": null,
+    "source": "arXiv",
+    "url": "https://arxiv.org/abs/1701.03960v2",
+    "snippet": "Trailing stop is a popular stop-loss trading strategy by which the investor will sell the asset once its price experiences a pre-specified percentage "
+  },
+  {
+    "title": "Angular dependenceof the magnetisation AC loss: coated conductors, Roebel cables and double pancake coils",
+    "year": null,
+    "venue": "arXiv",
+    "is_oa": true,
+    "pdf": null,
+    "doi": null,
+    "source": "arXiv",
+    "url": "https://arxiv.org/abs/1109.2747v1",
+    "snippet": "The AC loss in ReBCO coated conductors is large in situations when the conductors are subjected to a considerable magnetic field, like in rotating mac"
+  }
+]
