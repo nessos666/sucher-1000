@@ -519,7 +519,6 @@ def q_wikis(query, n=8):
     Live verifiziert 03.09.2026: alle 6 Projekte HTTP 200. Ein Adapter,
     mehrere Sub-Quellen — tote Projekte werden übersprungen (nicht fatal).
     """
-    import html as _html
     try:
         import net
     except ImportError:
@@ -624,7 +623,6 @@ def q_archive(query, n=8):
 
 def q_github(query, n=8):
     """GitHub-Suche (Repos), key-frei JSON. Live: 10 Suchanfragen/min anonym."""
-    import html as _html
     try:
         import net
     except ImportError:
