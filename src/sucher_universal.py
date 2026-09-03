@@ -244,6 +244,145 @@ def q_wikidata(query, n=6):
             "snippet": e.get("description","")})
     return out
 
+# ---------- Block 6: Zenodo / DataCite / DBLP / OpenAIRE (Agenten-Runde 2) ----------
+def q_zenodo(query, n=8):
+    """Zenodo (CERN) — wissenschaftliche Datensätze + Papers, key-frei, JSON.
+
+    Live verifiziert 03.09.2026: /api/records?q=… HTTP 200. DOI/title direkt.
+    EU-Funding-Infos in den Metadaten; fair use ohne Token.
+    """
+    url = "https://zenodo.org/api/records?" + urllib.parse.urlencode(
+        {"q": query, "size": n})
+    j = http_json(url)
+    if _check_fehler("zenodo", j): return []
+    out = []
+    for h in j.get("hits", {}).get("hits", []):
+        md = h.get("metadata", {})
+        title = md.get("title") or h.get("title") or ""
+        if not title:
+            continue
+        yr = None
+        pd = md.get("publication_date") or ""
+        if len(pd) >= 4 and pd[:4].isdigit():
+            yr = int(pd[:4])
+        doi = h.get("doi") or md.get("doi")
+        link = doi or (h.get("links", {}) or {}).get("self_html")
+        if doi and not str(doi).startswith("http"):
+            link = f"https://doi.org/{doi}"
+        out.append({"title": title, "year": yr, "venue": "Zenodo",
+                    "is_oa": True, "pdf": None, "doi": doi, "source": "Zenodo",
+                    "url": link, "snippet": "", "cites": 0, "relevance": 0})
+    return out
+
+
+def q_datacite(query, n=8):
+    """DataCite — ~40 Mio DOIs (Forschungsdaten + Publikationen), key-frei.
+
+    Live verifiziert 03.09.2026 (curl -4): /dois?query=… HTTP 200.
+    """
+    url = "https://api.datacite.org/dois?" + urllib.parse.urlencode(
+        {"query": query, "page[size]": n})
+    j = http_json(url)
+    if _check_fehler("datacite", j): return []
+    out = []
+    for d in j.get("data", []):
+        a = d.get("attributes", {})
+        titles = a.get("titles") or [{}]
+        title = titles[0].get("title") if isinstance(titles, list) else ""
+        if not title:
+            continue
+        creators = a.get("creators") or [{}]
+        author = creators[0].get("name", "") if creators else ""
+        out.append({"title": title, "year": a.get("publicationYear"),
+                    "venue": "DataCite", "is_oa": True, "pdf": None,
+                    "doi": a.get("doi"), "source": "DataCite",
+                    "url": a.get("url"), "snippet": author,
+                    "cites": 0, "relevance": 0})
+    return out
+
+
+def q_dblp(query, n=8):
+    """DBLP (Informatik-Bibliographie), key-frei, JSON.
+
+    Live verifiziert 03.09.2026: /search/publ/api?q=… HTTP 200.
+    Etikette: max ~1 Request/3s (Rate-Limit global drosselt bereits).
+    """
+    url = "https://dblp.org/search/publ/api?" + urllib.parse.urlencode(
+        {"q": query, "format": "json", "h": n})
+    j = http_json(url)
+    if _check_fehler("dblp", j): return []
+    out = []
+    hits = j.get("result", {}).get("hits", {}).get("hit", [])
+    if not isinstance(hits, list):
+        return []  # 0 Treffer: hit kann fehlen/leer sein (F8-Muster)
+    for h in hits:
+        info = h.get("info", {})
+        title = info.get("title") or ""
+        if not title:
+            continue
+        yr = info.get("year")
+        try:
+            yr = int(yr) if yr else None
+        except (TypeError, ValueError):
+            yr = None
+        doi = info.get("doi")
+        link = info.get("ee")
+        if doi and not link:
+            link = f"https://doi.org/{doi}"
+        out.append({"title": title, "year": yr, "venue": info.get("venue") or "",
+                    "is_oa": True, "pdf": None, "doi": doi, "source": "DBLP",
+                    "url": link, "snippet": "", "cites": 0, "relevance": 0})
+    return out
+
+
+def q_openaire(query, n=8):
+    """OpenAIRE (EU-Forschungsförderung), key-frei, JSON (XML-Hybrid).
+
+    Live verifiziert 03.09.2026: /search/publications?keywords=… HTTP 200.
+    Hinweis: alte Search-API laut Doku bis 31.05.2026 deprecated (läuft noch),
+    Umstieg auf Graph-API v3 einplanen.
+    """
+    url = "https://api.openaire.eu/search/publications?" + urllib.parse.urlencode(
+        {"keywords": query, "format": "json", "size": n})
+    j = http_json(url)
+    if _check_fehler("openaire", j): return []
+    out = []
+    results = j.get("response", {}).get("results", {})
+    hits = results.get("result", []) if isinstance(results, dict) else []
+    if not isinstance(hits, list):
+        hits = []
+    for h in hits:
+        try:
+            r = h["metadata"]["oaf:entity"]["oaf:result"]
+        except (KeyError, TypeError):
+            continue
+        titles = r.get("title") or [{}]
+        title = titles[0].get("$") if isinstance(titles, list) else ""
+        if not title:
+            continue
+        yr = None
+        dacc = r.get("dateofacceptance") or [{}]
+        dp = dacc[0].get("$", "") if isinstance(dacc, list) else ""
+        if len(dp) >= 4 and dp[:4].isdigit():
+            yr = int(dp[:4])
+        doi = None
+        for p in (r.get("pid") or []):
+            pv = p.get("$", "") if isinstance(p, dict) else ""
+            if pv.startswith("doi:"):
+                doi = pv[4:]
+                break
+        creators = r.get("creator") or [{}]
+        author = creators[0].get("$", "") if creators else ""
+        journal = (r.get("journal") or {}).get("name") or [{}]
+        venue = journal[0].get("$", "") if isinstance(journal, list) else ""
+        link = f"https://doi.org/{doi}" if doi else None
+        out.append({"title": title, "year": yr, "venue": venue,
+                    "is_oa": True, "pdf": None, "doi": doi,
+                    "source": "OpenAIRE", "url": link,
+                    "snippet": author, "cites": 0, "relevance": 0})
+    return out
+
+
 def q_lokal(query, n=10, zeitlimit_s=3):
     """LOKAL-SUCHE: durchsucht Davids HAUPTLAGER-Wissensbasis (Datei-NAMEN).
     Findet, was DAVID schon hat — vermeidet Doppelrecherche.
@@ -281,7 +420,9 @@ def q_lokal(query, n=10, zeitlimit_s=3):
 SCI = {"openalex": q_openalex, "crossref": q_crossref, "doaj": q_doaj,
        "europepmc": q_europepmc, "semanticscholar": q_semanticscholar,
        "arxiv": q_arxiv,
-       "pubmed": q_pubmed}   # bioRxiv weggelassen: dessen API hat KEINE Freiwort-Suche (nur DOI/COVID) → leer
+       "pubmed": q_pubmed,   # bioRxiv weggelassen: dessen API hat KEINE Freiwort-Suche (nur DOI/COVID) → leer
+       "zenodo": q_zenodo, "datacite": q_datacite, "dblp": q_dblp,
+       "openaire": q_openaire}   # Block 6 (Agenten-Runde 2, live geprüft 03.09.2026)
 GENERAL = {"wikipedia": q_wikipedia, "wikidata": q_wikidata, "lokal": q_lokal}
 
 def resolve_sources(mode):
@@ -519,6 +660,7 @@ def _score_sort(results):
     # Quelle-Gewicht (Peer-reviewed stärker)
     q_weight = {"OpenAlex":1.0, "EuropePMC":1.0, "Crossref":0.8, "DOAJ":0.8,
                 "PubMed":0.9, "arXiv":0.5, "SemanticScholar":0.8,
+                "Zenodo":0.7, "DataCite":0.7, "DBLP":0.8, "OpenAIRE":0.7,
                 "Wikipedia":0.3, "Wikidata":0.3, "Lokal":0.6}
     def score(r):
         cites = r.get("cites") or 0
