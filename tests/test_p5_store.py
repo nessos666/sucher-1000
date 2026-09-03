@@ -71,3 +71,41 @@ def test_json_feld_enthaelt_volles_result(st):
     parsed = json.loads(back[0]["json"])
     assert parsed["custom"] == "feld"
     assert parsed["title"] == "Voll"
+
+
+# --- F8 (OpenCode-Gesamt): Drift, modus, reason ---
+
+def test_modus_wird_gespeichert(st):
+    """save_ergebnisse muss modus durchreichen (nicht hart 'universal')."""
+    import sqlite3
+    st.save_ergebnisse("webquery", [{"title": "A", "url": "http://a.de", "source": "ddgs"}],
+                       modus="web")
+    conn = sqlite3.connect(str(st.db_path))
+    modus = conn.execute("SELECT modus FROM queries WHERE query='webquery'").fetchone()[0]
+    conn.close()
+    assert modus == "web", f"modus muss 'web' sein, ist: {modus}"
+
+
+def test_health_drift_wird_bereinigt(st):
+    """Verwaiste Health-Zeilen werden beim nächsten save_health gelöscht (F8)."""
+    st.save_health({"echte_quelle": {"state": "HEALTHY"}})
+    # Alte Zeile 'haengt' (Artefakt) ist noch in der DB
+    import sqlite3
+    conn = sqlite3.connect(str(st.db_path))
+    conn.execute("INSERT INTO provider_health (source, state) VALUES ('haengt', 'HEALTHY')")
+    conn.commit()
+    conn.close()
+    # Nächstes save_health mit nur echten Quellen → Artefakt verschwindet
+    st.save_health({"echte_quelle": {"state": "HEALTHY"}})
+    snap = st.health_snapshot()
+    assert "haengt" not in snap, "Verwaiste Health-Zeile muss gelöscht werden (Drift!)"
+    assert "echte_quelle" in snap
+
+
+def test_health_reason_wird_persistiert(st):
+    """NO_KEY-reason darf nicht verloren gehen (F8: reason-Spalte)."""
+    st.save_health({"tavily": {"state": "NO_KEY", "reason": "kein Env-Key"}})
+    snap = st.health_snapshot()
+    assert snap["tavily"]["state"] == "NO_KEY"
+    assert snap["tavily"]["reason"] == "kein Env-Key", \
+        f"reason muss persistiert werden, ist: {snap['tavily'].get('reason')}"

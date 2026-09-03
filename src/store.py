@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS provider_health (
     last_ok_ts TEXT,
     last_fail_ts TEXT,
     last_error TEXT,
-    cooldown_until TEXT
+    cooldown_until TEXT,
+    reason TEXT
 );
 """
 
@@ -87,21 +88,28 @@ class Store:
         conn = _connect(self.db_path)
         try:
             conn.executescript(SCHEMA)
+            # F8: Migration — reason-Spalte für bestehende DBs nachrüsten
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(provider_health)")}
+            if "reason" not in cols:
+                conn.execute("ALTER TABLE provider_health ADD COLUMN reason TEXT")
             conn.commit()
         finally:
             conn.close()
 
     # ---------- Schreiben (atomar) ----------
 
-    def save_ergebnisse(self, query: str, results: list):
-        """Einen Suchlauf + alle Treffer atomar speichern. Dedup via UNIQUE(query, url)."""
+    def save_ergebnisse(self, query: str, results: list, modus: str = "universal"):
+        """Einen Suchlauf + alle Treffer atomar speichern. Dedup via UNIQUE(query, url).
+
+        F8 (OpenCode-Gesamt): modus wird durchgereicht (vorher hart 'universal').
+        """
         ts = time.strftime("%Y-%m-%dT%H:%M:%S")
         conn = _connect(self.db_path)
         try:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 "INSERT INTO queries (query, modus, n, treffer, ts) VALUES (?,?,?,?,?)",
-                (query, "universal", len(results), len(results), ts))
+                (query, modus, len(results), len(results), ts))
             for r in results:
                 url = r.get("url") or ""
                 if not url:
@@ -129,7 +137,11 @@ class Store:
             conn.close()
 
     def save_health(self, health_data: dict):
-        """Health-Registry in Tabelle spiegeln (pro Quelle eine Zeile)."""
+        """Health-Registry in Tabelle spiegeln (pro Quelle eine Zeile).
+
+        F8 (OpenCode-Gesamt): löscht Zeilen, die im Registry nicht mehr existieren
+        (vorher Drift durch INSERT OR REPLACE ohne Cleanup).
+        """
         conn = _connect(self.db_path)
         try:
             conn.execute("BEGIN IMMEDIATE")
@@ -137,8 +149,8 @@ class Store:
                 conn.execute(
                     """INSERT OR REPLACE INTO provider_health
                        (source, state, consecutive_fails, ok_count, fail_count,
-                        last_ok_ts, last_fail_ts, last_error, cooldown_until)
-                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                        last_ok_ts, last_fail_ts, last_error, cooldown_until, reason)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
                     (source,
                      entry.get("state", "UNKNOWN"),
                      entry.get("consecutive_fails", 0),
@@ -147,7 +159,14 @@ class Store:
                      entry.get("last_ok_ts"),
                      entry.get("last_fail_ts"),
                      (entry.get("last_error") or "")[:300],
-                     entry.get("cooldown_until")))
+                     entry.get("cooldown_until"),
+                     (entry.get("reason") or "")[:200]))
+            # Verwaiste Zeilen löschen (F8: DB = Spiegel der JSON-Registry)
+            if health_data:
+                conn.execute(
+                    "DELETE FROM provider_health WHERE source NOT IN "
+                    f"({','.join('?' * len(health_data))})",
+                    list(health_data.keys()))
             conn.commit()
         except Exception:
             conn.rollback()

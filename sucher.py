@@ -126,7 +126,7 @@ def main():
     # 4) P5: SQLite-Archiv — jede Suche + Health in data/sucher.db
     try:
         store_inst = st.Store()
-        store_inst.save_ergebnisse(args.query, results)
+        store_inst.save_ergebnisse(args.query, results, modus=args.modus)
         try:
             import health as _health_mod
             reg = _health_mod.HealthRegistry()
