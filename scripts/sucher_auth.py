@@ -34,6 +34,9 @@ KEY_QUELLEN = {
     "google_books": ("GOOGLE_BOOKS_API_KEY", "https://console.cloud.google.com", "GET googleapis.com/books"),
     "serper":      ("SERPER_API_KEY",      "https://serper.dev/api-key",    "POST google.serper.dev/search"),
     "youcom":      ("YOUCOM_API_KEY",      "https://you.com/platform",      "POST api.you.com/v1/search"),
+    "zenrows":     ("ZENROWS_API_KEY",     "https://app.zenrows.com/register", "GET api.zenrows.com (Google-SERP)"),
+    "searchapi":   ("SEARCHAPI_KEY",       "https://www.searchapi.io/dashboard", "POST searchapi.io/api/v1/search"),
+    "firecrawl":   ("FIRECRAWL_API_KEY",   "https://www.firecrawl.dev",     "POST firecrawl.dev/v1/search"),
 }
 
 KEYS_DIR = Path.home() / ".config" / "sucher1000"

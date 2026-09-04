@@ -1169,11 +1169,119 @@ def q_youcom(query, n=8):
     return out
 
 
+def q_zenrows(query, n=8):
+    """ZenRows (Google-SERP via Scraper), Key-optional — 5.000 Credits/Monat.
+
+    Live verifiziert 03.09.2026: AUTH002 ohne gültigen Key (Endpoint lebt).
+    Key: ZENROWS_API_KEY (app.zenrows.com, karte-frei, monatlich erneuert).
+    """
+    key = _env("ZENROWS_API_KEY")
+    if not key:
+        print("  ⚠ [zenrows] übersprungen (kein ZENROWS_API_KEY — kostenlos: "
+              "https://app.zenrows.com/register, 5.000 Credits/Monat)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("zenrows", "net fehlt")
+        return []
+    out = []
+    # ZenRows scraped Google-SERP und liefert strukturierte results[]
+    target = "https://www.google.com/search?q=" + urllib.parse.quote(query)
+    url = ("https://api.zenrows.com/v1/?apikey=" + urllib.parse.quote(key)
+           + "&url=" + urllib.parse.quote(target) + "&autoparse=true")
+    j = net.get_json(url, timeout=12)
+    if "_error" in j:
+        _log_web_error("zenrows", j["_error"])
+        return []
+    for r in j.get("results", [])[:n]:
+        title = r.get("title") or ""
+        if not title:
+            continue
+        out.append({"title": title, "year": None, "venue": "Google SERP",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "ZenRows", "url": r.get("url"),
+                    "snippet": (r.get("snippet") or "")[:200]})
+    return out
+
+
+def q_searchapi(query, n=8):
+    """SearchAPI.io — 50+ Engines in einem Key (Google/Bing/DDG/Yandex…).
+
+    Live verifiziert 03.09.2026: 401 ohne Key (Endpoint lebt).
+    Key: SEARCHAPI_KEY (searchapi.io/dashboard, 100 Requests gratis).
+    """
+    key = _env("SEARCHAPI_KEY")
+    if not key:
+        print("  ⚠ [searchapi] übersprungen (kein SEARCHAPI_KEY — kostenlos: "
+              "https://www.searchapi.io/dashboard, 100 Requests)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("searchapi", "net fehlt")
+        return []
+    out = []
+    j = net.post_json("https://www.searchapi.io/api/v1/search",
+                      {"engine": "google", "q": query}, timeout=12,
+                      headers={"Authorization": f"Bearer {key}"})
+    if "_error" in j:
+        _log_web_error("searchapi", j["_error"])
+        return []
+    for r in j.get("organic_results", [])[:n]:
+        title = r.get("title") or ""
+        if not title:
+            continue
+        out.append({"title": title, "year": None, "venue": "Google SERP",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "SearchAPI", "url": r.get("link"),
+                    "snippet": (r.get("snippet") or "")[:200]})
+    return out
+
+
+def q_firecrawl(query, n=8):
+    """Firecrawl /search (Tavily-Ersatz + Scrape), Key-optional.
+
+    Live verifiziert 03.09.2026: 403 ohne Key (Endpoint lebt; IP-Sperre für
+    Rechenzentren ohne Key). Key: FIRECRAWL_API_KEY (firecrawl.dev, 1.000
+    Credits/Monat gratis ≈ 500 Suchen).
+    """
+    key = _env("FIRECRAWL_API_KEY")
+    if not key:
+        print("  ⚠ [firecrawl] übersprungen (kein FIRECRAWL_API_KEY — kostenlos: "
+              "https://www.firecrawl.dev, 1.000 Credits/Monat)", file=sys.stderr)
+        return []
+    try:
+        import net
+    except ImportError:
+        _log_web_error("firecrawl", "net fehlt")
+        return []
+    out = []
+    j = net.post_json("https://api.firecrawl.dev/v1/search",
+                      {"query": query, "limit": n}, timeout=12,
+                      headers={"Authorization": f"Bearer {key}"})
+    if "_error" in j:
+        _log_web_error("firecrawl", j["_error"])
+        return []
+    for r in (j.get("data") or [])[:n]:
+        title = r.get("title") or ""
+        if not title:
+            continue
+        out.append({"title": title, "year": None, "venue": "Firecrawl",
+                    "is_oa": True, "pdf": None, "doi": None,
+                    "source": "Firecrawl", "url": r.get("url"),
+                    "snippet": (r.get("description") or "")[:200]})
+    return out
+
+
 KEY_QUELLEN_MAP = {"tavily": "TAVILY_API_KEY", "exa": "EXA_API_KEY",
                    "serpapi": "SERPAPI_API_KEY", "reddit": "REDDIT_CLIENT_ID",
                    "knowledgegraph": "GOOGLE_KG_API_KEY",
                    "google_books": "GOOGLE_BOOKS_API_KEY",
-                   "serper": "SERPER_API_KEY", "youcom": "YOUCOM_API_KEY"}
+                   "serper": "SERPER_API_KEY", "youcom": "YOUCOM_API_KEY",
+                   "zenrows": "ZENROWS_API_KEY",
+                   "searchapi": "SEARCHAPI_KEY",
+                   "firecrawl": "FIRECRAWL_API_KEY"}
 
 # ---------- Register ----------
 WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
@@ -1186,7 +1294,8 @@ WEB = {"ddgs": q_ddgs, "bing": q_bing_html, "mojeek": q_mojeek,
        "youtube": q_youtube, "google_scholar": q_google_scholar,
        "autosuggest": q_autosuggest, "knowledgegraph": q_knowledgegraph,
        "google_books": q_google_books, "serper": q_serper,
-       "youcom": q_youcom}  # Block 7-11
+       "youcom": q_youcom, "zenrows": q_zenrows, "searchapi": q_searchapi,
+       "firecrawl": q_firecrawl}  # Block 7-14
 
 # P6-B3: Web-Quellen-Gewichte (für deterministische Sortierung — nicht
 # completion-order der Threads). Bing hinten: Junk-Problem (Juli-Audit ⭐⭐).
@@ -1200,7 +1309,8 @@ _WEB_WEIGHT = {"ddgs": 1.0, "mojeek": 1.0, "wikipedia": 0.9, "tavily": 0.8,
                "huggingface": 0.95, "googlepatents": 0.7, "reddit": 0.75,
                "youtube": 0.8, "scholar": 0.95, "googlesuggest": 0.3,
                "knowledgegraph": 0.85, "googlebooks": 0.7, "serper": 0.9,
-               "you.com": 0.8}
+               "you.com": 0.8, "zenrows": 0.9, "searchapi": 0.9,
+               "firecrawl": 0.85}
 
 
 def _web_score_sort(results):
