@@ -46,36 +46,36 @@
       "query": "AI coding agent benchmark evaluation",
       "modus": "alle",
       "n": 5,
-      "erwartete_domains": ["arxiv.org", "github.com"],
-      "thema": "KI-Coding-Agenten"
+      "erwartete_domains": ["arxiv.org"],
+      "thema": "KI-Coding-Agenten (arxiv Primär; github nur via quelle)"
     },
     {
       "query": "PTBS Behandlung München Therapeut",
       "modus": "web",
-      "n": 5,
-      "erwartete_domains": ["therapie.de", "ptsd-netz.de"],
-      "thema": "Lokale Suche"
+      "n": 8,
+      "erwartete_domains": ["muenchen-klinik.de", "psychotherapie-muenchen.de"],
+      "thema": "Lokale Suche (kalibriert: echte Top-Relevanz 03.09.2026)"
     },
     {
       "query": "Hausmeister Stelle Island Unterkunft",
       "modus": "web",
-      "n": 5,
-      "erwartete_domains": ["island.is", "vinna.is"],
-      "thema": "Davids Island-Plan"
+      "n": 8,
+      "erwartete_domains": ["auslandsjob.de", "jooble.org"],
+      "thema": "Davids Island-Plan (kalibriert: Job-Portale statt Behörden)"
     },
     {
       "query": "Ungarn Firma gruenden EU Steuern",
       "modus": "web",
-      "n": 5,
-      "erwartete_domains": ["nav.gov.hu", "europa.eu"],
-      "thema": "Vermoegens-Plan Ungarn"
+      "n": 8,
+      "erwartete_domains": ["wko.at", "auslandsunternehmen.com"],
+      "thema": "Vermoegens-Plan Ungarn (kalibriert: seriöse Ratgeber)"
     },
     {
       "query": "gold allocation Switzerland storage safe",
       "modus": "web",
-      "n": 5,
-      "erwartete_domains": [],
-      "thema": "Vermoegens-Plan Gold (nur Treffer-Check)"
+      "n": 8,
+      "erwartete_domains": ["swissgoldsafe.ch"],
+      "thema": "Vermoegens-Plan Gold (kalibriert: echte Top-Domain)"
     },
     {
       "query": "trauma-informed yoga research",

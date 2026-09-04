@@ -86,7 +86,7 @@ def _erwartung_getroffen(erwartete, domains, dois):
         if v:
             kandidaten.append(v)
     for e in erwartete:
-        e = e.lower().lstrip("www.")
+        e = e.lower().removeprefix("www.")
         elabels = e.split(".")
         hit = False
         for d in kandidaten:
@@ -152,9 +152,16 @@ def main():
         sys.exit(1)
 
     print(f"Golden-Query-Check: {len(queries)} Queries\n")
+    # Rate-Limit-Schutz: 12 Queries × 16 Quellen hintereinander triggern
+    # API-Limits (PubMed 3 r/s, CORE 1 r/10s) — Pause zwischen Queries,
+    # sonst misst der Check Rate-Limits statt Qualität.
+    import os as _os
+    PAUSE_S = float(_os.environ.get("GOLDEN_PAUSE", "3"))
     ergebnisse = []
     t0 = time.time()
-    for q in queries:
+    for idx, q in enumerate(queries):
+        if idx > 0 and PAUSE_S > 0:
+            time.sleep(PAUSE_S)
         query, modus, n = q["query"], q["modus"], q["n"]
         erwartet = q.get("erwartete_domains", [])
         thema = q.get("thema", "")
