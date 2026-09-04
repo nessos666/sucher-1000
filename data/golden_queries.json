@@ -3,85 +3,115 @@
     {
       "query": "emotional neglect mother adult children",
       "modus": "studien",
-      "n": 5,
-      "erwartete_domains": ["pubmed.ncbi.nlm.nih.gov", "sciencedirect.com"],
+      "n": 8,
+      "erwartete_domains": [
+        "pubmed.ncbi.nlm.nih.gov",
+        "sciencedirect.com"
+      ],
       "thema": "Davids Forschung: toxische Mutter"
     },
     {
       "query": "narcissistic mother enmeshment recovery",
       "modus": "studien",
-      "n": 5,
-      "erwartete_domains": ["pubmed.ncbi.nlm.nih.gov", "apa.org"],
+      "n": 8,
+      "erwartete_domains": [
+        "sciencedirect.com",
+        "apa.org"
+      ],
       "thema": "Davids Forschung: Narzissmus"
     },
     {
       "query": "posttraumatic growth EMDR systematic review",
       "modus": "studien",
-      "n": 5,
-      "erwartete_domains": ["pubmed.ncbi.nlm.nih.gov"],
+      "n": 8,
+      "erwartete_domains": [
+        "sciencedirect.com"
+      ],
       "thema": "Davids Forschung: PTBS-Behandlung"
     },
     {
       "query": "bentonite soil water retention agriculture",
       "modus": "studien",
       "n": 5,
-      "erwartete_domains": ["sciencedirect.com", "mdpi.com", "springer.com"],
+      "erwartete_domains": [
+        "sciencedirect.com",
+        "mdpi.com",
+        "springer.com"
+      ],
       "thema": "Bentonit 3D Wasserreservoir"
     },
     {
       "query": "bentonite clay swelling permeability barrier",
       "modus": "studien",
       "n": 5,
-      "erwartete_domains": ["sciencedirect.com"],
+      "erwartete_domains": [
+        "sciencedirect.com"
+      ],
       "thema": "Bentonit-Technik"
     },
     {
       "query": "large language model agents tool use survey",
       "modus": "studien",
       "n": 5,
-      "erwartete_domains": ["arxiv.org"],
+      "erwartete_domains": [
+        "arxiv.org"
+      ],
       "thema": "KI-Agenten (Davids Beruf)"
     },
     {
       "query": "AI coding agent benchmark evaluation",
       "modus": "alle",
       "n": 5,
-      "erwartete_domains": ["arxiv.org"],
+      "erwartete_domains": [
+        "arxiv.org"
+      ],
       "thema": "KI-Coding-Agenten (arxiv Primär; github nur via quelle)"
     },
     {
       "query": "PTBS Behandlung München Therapeut",
       "modus": "web",
       "n": 8,
-      "erwartete_domains": ["muenchen-klinik.de", "psychotherapie-muenchen.de"],
-      "thema": "Lokale Suche (kalibriert: echte Top-Relevanz 03.09.2026)"
+      "erwartete_domains": [
+        "muenchen-klinik.de"
+      ],
+      "thema": "Lokale Suche (kalibriert: muenchen-klinik.de Top-1 real)"
     },
     {
       "query": "Hausmeister Stelle Island Unterkunft",
       "modus": "web",
       "n": 8,
-      "erwartete_domains": ["auslandsjob.de", "jooble.org"],
+      "erwartete_domains": [
+        "auslandsjob.de",
+        "jooble.org"
+      ],
       "thema": "Davids Island-Plan (kalibriert: Job-Portale statt Behörden)"
     },
     {
       "query": "Ungarn Firma gruenden EU Steuern",
       "modus": "web",
       "n": 8,
-      "erwartete_domains": ["wko.at", "auslandsunternehmen.com"],
+      "erwartete_domains": [
+        "wko.at",
+        "auslandsunternehmen.com"
+      ],
       "thema": "Vermoegens-Plan Ungarn (kalibriert: seriöse Ratgeber)"
     },
     {
       "query": "gold allocation Switzerland storage safe",
       "modus": "web",
       "n": 8,
-      "erwartete_domains": ["swissgoldsafe.ch"],
+      "erwartete_domains": [
+        "swissgoldsafe.ch"
+      ],
       "thema": "Vermoegens-Plan Gold (kalibriert: echte Top-Domain)"
     },
     {
       "query": "trauma-informed yoga research",
       "modus": "studien",
-      "n": 5,
-      "erwartete_domains": ["pubmed.ncbi.nlm.nih.gov"],
+      "n": 8,
+      "erwartete_domains": [
+        "sciencedirect.com"
+      ],
       "thema": "Therapie-Vergleich"
     }
   ]

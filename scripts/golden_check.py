@@ -66,10 +66,16 @@ _DOI_VERLAG = {
 
 
 def _doi_verlag(doi):
-    """DOI → Verlag-Domain (wenn Prefix bekannt)."""
+    """DOI → Verlag-Domain (wenn Prefix bekannt). Normalisiert vollen
+    doi.org-Link (OpenAlex liefert 'https://doi.org/10.1016/…')."""
     if not doi:
         return ""
-    d = str(doi).lower()
+    d = str(doi).lower().strip()
+    for praefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+        if d.startswith(praefix):
+            d = d[len(praefix):]
+            break
+    # auf reine 10.x-Form bringen (Pfad evtl. mit /)
     for prefix, verlag in sorted(_DOI_VERLAG.items(), key=lambda x: -len(x[0])):
         if d.startswith(prefix.lower()):
             return verlag
