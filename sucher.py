@@ -67,6 +67,10 @@ def main():
     ap.add_argument("--download", action="store_true", help="Automatisch frei ladbare herunterladen")
     ap.add_argument("--setup", action="store_true", help="Umgebung prüfen")
     ap.add_argument("--sources", action="store_true", help="Quellen anzeigen")
+    ap.add_argument("--archiv", default=None, metavar="BEGRIFF",
+                    help="NUR lokal archivierte Ergebnisse durchsuchen (FTS5, "
+                         "kein Netz): Titel/Snippet/URL aller gespeicherten "
+                         "Suchen. '!wort' ausschließen, '\"phrase\"' exakt")
     args = ap.parse_args()
 
     if args.setup:
@@ -84,6 +88,34 @@ def main():
         print("\n  WEB-BÜNDEL (Multi-Engine, --modus web):")
         subprocess.run([sys.executable, "-c",
             "import sys; sys.path.insert(0, '" + SRC + "'); import sucher_web; sucher_web.list_web()"])
+        return
+
+    if args.archiv:
+        # Block 15: FTS5-Archiv-Suche — keine Netz-Quellen, nur lokale DB
+        try:
+            import store as store_mod
+        except ImportError:
+            print("  Archiv-Suche nicht verfügbar (store-Modul fehlt)"); return
+        inst = store_mod.Store()
+        treffer = inst.archiv_suche(args.archiv, limit=args.n)
+        print(f"🔍 SUCHER — Archiv-Suche: '{args.archiv}' (lokal, keine Netz-Quellen)\n")
+        if not treffer:
+            print(f"  Keine archivierten Treffer für '{args.archiv}' "
+                  f"({inst.anzahl_ergebnisse()} Ergebnisse im Archiv).")
+            print("  Tipp: Erst live suchen (z. B. sucher 'thema'), dann --archiv nutzen.")
+            return
+        for r in treffer[:args.n]:
+            quelle = r.get("quelle") or "?"
+            title = (r.get("title") or "(ohne Titel)")[:90]
+            url = (r.get("url") or "")[:90]
+            jahr = r.get("year") or ""
+            print(f"  [{quelle}] {title} ({jahr})")
+            print(f"      {url}")
+            sn = (r.get("snippet") or "").strip()
+            if sn:
+                print(f"      {sn[:120]}")
+        print(f"\n  → {len(treffer)} Archiv-Treffer (von {inst.anzahl_ergebnisse()} "
+              f"Ergebnissen, FTS5-BM25-Ranking)")
         return
 
     if not args.query:
