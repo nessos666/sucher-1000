@@ -1187,10 +1187,13 @@ def q_zenrows(query, n=8):
         return []
     out = []
     # ZenRows scraped Google-SERP und liefert strukturierte results[]
+    # Security (OpenCode-Review): Key steckt in der URL → bei 403/429 würde der
+    # Proxy-Fallback (net._try_proxy) den Key an den Drittanbieter-Proxy leaken.
+    # proxy_retry=False verhindert das — ZenRows-Fehler direkt behandeln.
     target = "https://www.google.com/search?q=" + urllib.parse.quote(query)
     url = ("https://api.zenrows.com/v1/?apikey=" + urllib.parse.quote(key)
            + "&url=" + urllib.parse.quote(target) + "&autoparse=true")
-    j = net.get_json(url, timeout=12)
+    j = net.get_json(url, timeout=12, proxy_retry=False)
     if "_error" in j:
         _log_web_error("zenrows", j["_error"])
         return []
