@@ -92,6 +92,13 @@ class Store:
             cols = {r[1] for r in conn.execute("PRAGMA table_info(provider_health)")}
             if "reason" not in cols:
                 conn.execute("ALTER TABLE provider_health ADD COLUMN reason TEXT")
+            # Block 15 (FTS5-Archiv): Volltext-Index über ergebnisse anlegen,
+            # falls nicht vorhanden (external content → rebuild aus Tabelle).
+            conn.execute(
+                """CREATE VIRTUAL TABLE IF NOT EXISTS ergebnisse_fts USING fts5(
+                       query, quelle, title, url, doi, snippet,
+                       content='ergebnisse', content_rowid='id',
+                       tokenize='unicode61')""")
             conn.commit()
         finally:
             conn.close()
@@ -198,5 +205,69 @@ class Store:
         conn = _connect(self.db_path)
         try:
             return conn.execute("SELECT COUNT(*) AS c FROM ergebnisse").fetchone()["c"]
+        finally:
+            conn.close()
+
+    # ---------- FTS5-Archiv-Suche (Block 15) ----------
+
+    @staticmethod
+    def _fts_query(begriff: str) -> str:
+        """Freitext → FTS5-MATCH-Query.
+
+        Regeln (fzf/Recherche-Muster, robust gegen Syntax-Fehler):
+        - Jedes Wort wird Präfix-Token ('benton' findet 'Bentonite')
+        - Mehrere Wörter = UND (implizit in FTS5)
+        - Wort mit '!' voran = NOT
+        - "exakte phrase" = Phrase (wörtlich)
+        - Sonderzeichen, die FTS5-Syntax brechen, werden entfernt
+        """
+        import re
+        begriff = begriff.strip()
+        if not begriff:
+            return ""
+        teile = []
+        for m in re.finditer(r'"([^"]+)"|(\S+)', begriff):
+            phrase, wort = m.group(1), m.group(2)
+            if phrase is not None:
+                # Phrase: Token bereinigen, als gequotete Phrase einfügen
+                p = re.sub(r'[^\wäöüÄÖÜß\- ]', '', phrase, flags=re.UNICODE).strip()
+                if p:
+                    teile.append(f'"{p}"')
+            elif wort:
+                neg = wort.startswith("!")
+                w = wort.lstrip("!").strip("'")
+                w = re.sub(r'[^\wäöüÄÖÜß\-]', '', w, flags=re.UNICODE)
+                if w:
+                    teile.append(("NOT " if neg else "") + w + "*")
+        return " ".join(teile)
+
+    def archiv_suche(self, begriff: str, limit: int = 20) -> list:
+        """FTS5-Volltextsuche über alle archivierten Ergebnisse.
+
+        Rebuild vor jeder Suche (bei 864 Zeilen <10 ms; immer aktuell, kein
+        Trigger-Management). BM25-Ranking mit Spaltengewichten:
+        title/url 6×, snippet/doi 3×, query/quelle 1× (Titel-Treffer gewinnen).
+        Gibt Dicts wie letzte_ergebnisse zurück (url/title/quelle/ts + score).
+        """
+        query = self._fts_query(begriff)
+        if not query:
+            return []
+        conn = _connect(self.db_path)
+        try:
+            # Rebuild = External-Content-Index aus ergebnisse-Tabelle füllen
+            conn.execute("INSERT INTO ergebnisse_fts(ergebnisse_fts) VALUES('rebuild')")
+            rows = conn.execute(
+                """SELECT e.id, e.query, e.quelle, e.title, e.url, e.year,
+                          e.doi, e.is_oa, e.pdf, e.snippet, e.ts,
+                          bm25(ergebnisse_fts, 1.0, 1.0, 6.0, 6.0, 3.0, 3.0) AS score
+                   FROM ergebnisse_fts
+                   JOIN ergebnisse e ON e.id = ergebnisse_fts.rowid
+                   WHERE ergebnisse_fts MATCH ?
+                   ORDER BY score LIMIT ?""",
+                (query, limit)).fetchall()
+            return [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            # FTS5-Syntaxfehler trotz Sanitizing → leer statt Crash
+            return []
         finally:
             conn.close()
