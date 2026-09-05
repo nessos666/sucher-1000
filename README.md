@@ -51,6 +51,11 @@ Einfacher: `./launch.sh` (Menü: Web / Studien / Alles).
 # Nur eine Quelle
 .venv/bin/python sucher.py "KI Agenten" 5 --quelle openalex
 
+# 🔎 Archiv-Suche (lokal, kein Netz): durchsucht ALLE gespeicherten Suchen
+.venv/bin/python sucher.py --archiv 'bentonit'          # Präfix: findet 'Bentonite'
+.venv/bin/python sucher.py --archiv 'water retention'   # UND: beide Wörter nötig
+.venv/bin/python sucher.py --archiv 'trauma !kindheit'  # NOT: ohne 'kindheit'
+
 # Setup prüfen / Quellen anzeigen
 .venv/bin/python sucher.py --setup
 .venv/bin/python sucher.py --sources
