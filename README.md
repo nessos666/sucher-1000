@@ -88,10 +88,32 @@ geschrieben, chmod 600). Fehlt ein Key, wird die Quelle übersprungen
 
 ## 🩺 Qualität
 
-- **180 automatisierte Tests** (Netz gemockt — offline reproduzierbar)
+- **206 automatisierte Tests** (Netz gemockt — offline reproduzierbar)
 - Profi-Quality-Gate: `./check.sh` → Syntax + mypy + ruff + bandit + pytest
 - Von 2 unabhängigen KI-Reviewern auditiert (Codex + OpenCode), alle Findings behoben
 - Jeder Block einzeln committet — saubere, nachvollziehbare Historie
+- Golden-Query-Check: `python scripts/golden_check.py` → 12 Themen, echte Live-Messung
+  der Treffer-Qualität (Report in `docs/audits/`)
+
+## 💡 Tipp: Ergebnis-Archiv durchsuchen (Linux)
+
+SUCHER speichert jede Suche als strukturierte Datei (`--out <ordner>`), oft auch im
+SQLite-Archiv. Zum schnellen Durchsuchen gespeicherter Ergebnisse im Terminal:
+
+```bash
+# Aliase + ss()-Funktion einmalig einrichten (in ~/.bashrc):
+alias bat='batcat'   # Ubuntu: bat heißt batcat
+alias fd='fdfind'    # Ubuntu: fd heißt fdfind
+
+# 1) Blitz-Suche im Ergebnis-Ordner (10× schneller als grep):
+rg --smart-case "PTBS" ergebnisse/
+
+# 2) Interaktives Live-Filtern mit Vorschau (fzf + bat):
+rg --no-heading "bentonit" ergebnisse/ | fzf --preview 'bat --color=always {1}'
+```
+
+Voraussetzung (einmalig): `sudo apt install ripgrep fzf bat fd-find`
+Details: `docs/recherche_linux_suchverbesserung_20260904.md`
 
 ## 📁 Projektstruktur
 
