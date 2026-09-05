@@ -76,19 +76,50 @@ def test_archiv_suche_snippet(tmp_store):
 
 
 def test_archiv_suche_ranking_title_vor_snippet(tmp_store):
-    """BM25-Gewichtung: Titel-Treffer rankt vor Snippet-Treffer."""
+    """BM25-Gewichtung: Titel-Treffer rankt vor Snippet-Treffer.
+
+    Zwei konkurrierende Treffer: einer mit 'wasser' im Titel, einer nur im
+    Snippet — der Titel-Treffer muss vorne stehen (echtes Ranking, OpenCode-6).
+    """
     tmp_store.save_ergebnisse("q", [
-        _beispiel_ergebnis("Unrelated topic alpha beta", url="https://a.de/1"),
-        _beispiel_ergebnis("Zweiter Titel", url="https://a.de/2"),
+        _beispiel_ergebnis("Wasser retention Modell", url="https://a.de/1"),
+        _beispiel_ergebnis("Bodenstudie generisch", url="https://a.de/2"),
     ])
-    # Nur Snippet-Treffer für 'wasser' bei Nr. 2
     conn = sqlite3.connect(tmp_store.db_path)
-    conn.execute("UPDATE ergebnisse SET snippet='wasser retention studien' WHERE url='https://a.de/2'")
+    conn.execute("UPDATE ergebnisse SET snippet='wasser retention untersuchung' "
+                 "WHERE url='https://a.de/2'")
     conn.commit()
     conn.close()
-    treffer = tmp_store.archiv_suche("wasser")
-    assert len(treffer) == 1
-    assert treffer[0]["url"] == "https://a.de/2"
+    treffer = tmp_store.archiv_suche("wasser", limit=10)
+    urls = [t["url"] for t in treffer]
+    assert "https://a.de/1" in urls and "https://a.de/2" in urls
+    # Titel-Treffer (a.de/1) rankt vor Snippet-only (a.de/2)
+    assert urls.index("https://a.de/1") < urls.index("https://a.de/2"), urls
+
+
+def test_archiv_suche_bindestrich_kein_not(tmp_store):
+    """'trauma-therapie' darf NICHT als 'trauma NOT therapie' matchen
+    (FTS5-Operator-Kollision — OpenCode-Finding 1)."""
+    tmp_store.save_ergebnisse("q", [
+        _beispiel_ergebnis("Trauma Therapie Kombination", url="https://a.de/1"),
+        _beispiel_ergebnis("Trauma ohne Therapieinhalt", url="https://a.de/2"),
+    ])
+    treffer = tmp_store.archiv_suche("trauma-therapie")
+    # beide dürfen kommen (Bindestrich = UND beider Wörter), mind. der Titel-
+    # Treffer, der beide Wörter enthält
+    assert any(t["url"] == "https://a.de/1" for t in treffer)
+    # KEIN stilles NOT: a.de/1 (beide Wörter) darf nie fehlen, wenn a.de/2 da ist
+    urls = {t["url"] for t in treffer}
+    assert "https://a.de/1" in urls
+
+
+def test_archiv_suche_nur_not_leer(tmp_store):
+    """'!kindheit' allein (kein positiver Begriff) → "" → CLI-Hinweis,
+    kein FTS5-Syntaxfehler, kein falsches '0 Treffer'-Ranking."""
+    tmp_store.save_ergebnisse("q", [_beispiel_ergebnis("Trauma Studie")])
+    assert tmp_store.archiv_suche("!kindheit") == []
+    assert tmp_store.archiv_suche("trauma !kindheit") != []  # gemischt = ok
+
 
 
 def test_archiv_suche_kein_treffer(tmp_store):

@@ -99,6 +99,15 @@ class Store:
                        query, quelle, title, url, doi, snippet,
                        content='ergebnisse', content_rowid='id',
                        tokenize='unicode61')""")
+            # Dirty-Tracking: bis wohin ist der FTS-Index gebaut? (OpenCode-4)
+            # External-content-FTS spiegelt COUNT/MAX der Quelltabelle → ein
+            # Vergleich über die Index-Tabelle selbst ist nicht möglich.
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS fts_state (
+                       id INTEGER PRIMARY KEY CHECK (id = 1),
+                       last_rebuilt_id INTEGER NOT NULL DEFAULT 0)""")
+            conn.execute(
+                "INSERT OR IGNORE INTO fts_state (id, last_rebuilt_id) VALUES (1, 0)")
             conn.commit()
         finally:
             conn.close()
@@ -219,7 +228,10 @@ class Store:
         - Mehrere Wörter = UND (implizit in FTS5)
         - Wort mit '!' voran = NOT
         - "exakte phrase" = Phrase (wörtlich)
-        - Sonderzeichen, die FTS5-Syntax brechen, werden entfernt
+        - NUR Sonderzeichen bereinigt; Bindestrich wird NICHT als Wortzeichen
+          behandelt (FTS5 interpretiert '-x' als NOT → 'trauma-therapie' würde
+          still zu 'trauma NOT therapie' → Bindestriche zu Leerzeichen)
+        - Nur-Ausschluss-Query (kein positiver Begriff) → "" (CLI meldet das)
         """
         import re
         begriff = begriff.strip()
@@ -230,15 +242,23 @@ class Store:
             phrase, wort = m.group(1), m.group(2)
             if phrase is not None:
                 # Phrase: Token bereinigen, als gequotete Phrase einfügen
-                p = re.sub(r'[^\wäöüÄÖÜß\- ]', '', phrase, flags=re.UNICODE).strip()
+                p = re.sub(r'[^\wäöüÄÖÜß ]', ' ', phrase, flags=re.UNICODE).strip()
+                p = re.sub(r'\s+', ' ', p)
                 if p:
                     teile.append(f'"{p}"')
             elif wort:
                 neg = wort.startswith("!")
                 w = wort.lstrip("!").strip("'")
-                w = re.sub(r'[^\wäöüÄÖÜß\-]', '', w, flags=re.UNICODE)
-                if w:
-                    teile.append(("NOT " if neg else "") + w + "*")
+                # Bindestrich → Leerzeichen (FTS5-Operator-Kollision vermeiden)
+                w = re.sub(r'[^\wäöüÄÖÜß]', ' ', w, flags=re.UNICODE).strip()
+                w = re.sub(r'\s+', ' ', w)
+                for sub in w.split():
+                    teile.append(("NOT " if neg else "") + sub + "*")
+        # Nur-Ausschluss ohne positiven Begriff: FTS5 bräuchte einen Anker —
+        # leer zurückgeben, CLI meldet "nur !-Begriffe" verständlich.
+        positive = [t for t in teile if not t.startswith("NOT ")]
+        if not positive:
+            return ""
         return " ".join(teile)
 
     def archiv_suche(self, begriff: str, limit: int = 20) -> list:
@@ -254,8 +274,21 @@ class Store:
             return []
         conn = _connect(self.db_path)
         try:
-            # Rebuild = External-Content-Index aus ergebnisse-Tabelle füllen
-            conn.execute("INSERT INTO ergebnisse_fts(ergebnisse_fts) VALUES('rebuild')")
+            # Dirty-Rebuild (OpenCode-Finding 4): Voll-Rebuild bei JEDER Suche
+            # wäre O(Archiv) je Query. External-content-FTS kann seinen eigenen
+            # Stand nicht per COUNT/MAX(rowid) prüfen (spiegelt Quelltabelle),
+            # daher fts_state.last_rebuilt_id: nur rebuilden wenn die ergebnisse-
+            # Tabelle seither gewachsen ist (INSERT-only → max(id) reicht).
+            max_id = conn.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM ergebnisse").fetchone()[0]
+            last = conn.execute(
+                "SELECT last_rebuilt_id FROM fts_state WHERE id = 1").fetchone()
+            if last is None or last[0] < max_id:
+                conn.execute("INSERT INTO ergebnisse_fts(ergebnisse_fts) VALUES('rebuild')")
+                conn.execute(
+                    "UPDATE fts_state SET last_rebuilt_id = ? WHERE id = 1",
+                    (max_id,))
+                conn.commit()
             rows = conn.execute(
                 """SELECT e.id, e.query, e.quelle, e.title, e.url, e.year,
                           e.doi, e.is_oa, e.pdf, e.snippet, e.ts,

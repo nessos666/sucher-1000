@@ -97,14 +97,23 @@ def main():
         except ImportError:
             print("  Archiv-Suche nicht verfügbar (store-Modul fehlt)"); return
         inst = store_mod.Store()
-        treffer = inst.archiv_suche(args.archiv, limit=args.n)
+        # Finding 5 (OpenCode): n validieren — 0/negativ ergäbe LIMIT 0/Inkonsistenz
+        limit = max(int(args.n or 12), 1)
+        treffer = inst.archiv_suche(args.archiv, limit=limit)
         print(f"🔍 SUCHER — Archiv-Suche: '{args.archiv}' (lokal, keine Netz-Quellen)\n")
         if not treffer:
+            # Nur-!-Begriff? (FTS5 bräuchte positiven Anker)
+            nur_not = all(w.startswith("!") for w in args.archiv.split()
+                          if w.strip("!\""))
+            if nur_not:
+                print("  Nur Ausschluss-Begriffe ('!wort') — ohne positiven Begriff")
+                print("  gibt es nichts zu durchsuchen. Beispiel: sucher --archiv 'trauma !kindheit'")
+                return
             print(f"  Keine archivierten Treffer für '{args.archiv}' "
                   f"({inst.anzahl_ergebnisse()} Ergebnisse im Archiv).")
             print("  Tipp: Erst live suchen (z. B. sucher 'thema'), dann --archiv nutzen.")
             return
-        for r in treffer[:args.n]:
+        for r in treffer[:limit]:
             quelle = r.get("quelle") or "?"
             title = (r.get("title") or "(ohne Titel)")[:90]
             url = (r.get("url") or "")[:90]
@@ -117,7 +126,6 @@ def main():
         print(f"\n  → {len(treffer)} Archiv-Treffer (von {inst.anzahl_ergebnisse()} "
               f"Ergebnissen, FTS5-BM25-Ranking)")
         return
-
     if not args.query:
         # Laien-UX (Agent-1-Top-1): freundliche Begrüßung statt Usage-Error.
         # Wenn Terminal (TTY): interaktiven Assistenten anbieten.
