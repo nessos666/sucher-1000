@@ -21,13 +21,18 @@ Rückgabe-Vertrag (kompatibel zu http_json):
 from __future__ import annotations
 
 import json
+
+# ---------- Konfiguration ----------
+# User-Agent: neutral + Env-konfigurierbar (keine private E-Mail bei
+# Veröffentlichung — Kontakt via SUCHER_CONTACT_EMAIL setzbar)
+import os as _os
 import re
 import time
 import urllib.error
 import urllib.request
 
-# ---------- Konfiguration ----------
-UA = {"User-Agent": "Sucher1000/ (mailto:kontakt@sucher1000.example)"}
+UA = {"User-Agent": "Sucher1000/" + _os.environ.get("SUCHER_VERSION", "2.0")
+      + " (kontakt: " + _os.environ.get("SUCHER_CONTACT_EMAIL", "keine") + ")"}
 TIMEOUT_S = 8          # hart pro Request (heute 25s!)
 RETRIES = 2
 BACKOFF_429_S = 1.0    # kurz, nicht 5s

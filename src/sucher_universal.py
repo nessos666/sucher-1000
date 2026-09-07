@@ -17,7 +17,7 @@ import threading
 import urllib.parse
 import urllib.request
 
-UA = {"User-Agent": "Sucher1000/ (mailto:kontakt@sucher1000.example)"}
+UA = {"User-Agent": "Sucher1000/" + os.environ.get("SUCHER_VERSION", "1.1") + " (kontakt: " + os.environ.get("SUCHER_CONTACT_EMAIL", "keine") + ")"}
 OUTDIR = "sucher_ergebnisse"
 os.makedirs(OUTDIR, exist_ok=True)
 
@@ -408,7 +408,7 @@ def q_openaire(query, n=8):
 def q_clinicaltrials(query, n=8):
     """ClinicalTrials.gov v2 — klinische Studien weltweit, key-frei JSON.
 
-    Live verifiziert 03.09.2026 (Agent-2). Für Davids Themen (PTBS, Trauma):
+    Live verifiziert 03.09.2026 (Agent-2). Für psychologische/medizinische Themen:
     NCT-IDs + Volltext-Protokoll. Status (RECRUITING etc.) im Snippet.
     """
     url = "https://clinicaltrials.gov/api/v2/studies?" + urllib.parse.urlencode(
@@ -556,7 +556,7 @@ def q_doab(query, n=8):
 def q_lokal(query, n=10, zeitlimit_s=3):
     """LOKAL-SUCHE: durchsucht die lokale Wissensbasis (Datei-NAMEN).
     Findet, was der Nutzer schon hat — vermeidet Doppelrecherche.
-    Basis-Pfad: Env SUCHER_LOKAL_BASE (Default: ~/HAUPTLAGER — Davids Ordnung;
+    Basis-Pfad: Env SUCHER_LOKAL_BASE (Default: ~/HAUPTLAGER;
     andere Nutzer setzen die Env auf ihren Wissens-Ordner).
     Hinweis (F8/OpenCode): matcht NUR Dateinamen, nicht Datei-Inhalt
     (Inhalts-Suche wäre zu langsam über 133GB).

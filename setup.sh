@@ -4,7 +4,7 @@
 # Prüft python3 → legt venv an → installiert Abhängigkeiten →
 # macht 'sucher'-Starter in ~/.local/bin → fragt optionale Keys ab.
 #
-# Nutzung:  ./setup.sh        (oder: curl -fsSL <URL> | bash)
+# Nutzung:  git clone <repo> && ./setup.sh   (im geklonten Repo ausführen)
 # ============================================================
 set -e
 

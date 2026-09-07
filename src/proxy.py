@@ -22,7 +22,7 @@ import urllib.request
 HOST = "gw.dataimpulse.com"
 PORT = "823"
 
-UA = {"User-Agent": "Sucher1000/ (mailto:kontakt@sucher1000.example)"}
+UA = {"User-Agent": "Sucher1000/" + os.environ.get("SUCHER_VERSION", "2.0") + " (kontakt: " + os.environ.get("SUCHER_CONTACT_EMAIL", "keine") + ")"}
 
 
 def _env(name: str) -> str:

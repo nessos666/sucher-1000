@@ -13,13 +13,14 @@ Nutzung:
   python3 sucher_oa.py <doi-ou-URL>          # → druckt beste freie PDF-URL + Quelle
   python3 sucher_oa.py --list                # Quellen anzeigen
 """
+import os
 import re
 import sys
 import urllib.parse
 import urllib.request
 
-EMAIL = "kontakt@sucher1000.example"
-UA = {"User-Agent": f"Sucher1000/ (mailto:{EMAIL})"}
+EMAIL = os.environ.get("SUCHER_CONTACT_EMAIL", "unbekannt@example.org")
+UA = {"User-Agent": f"Sucher1000/1.2 (kontakt: {EMAIL})"}
 
 def http_json(url, timeout=8):
     """Gehärteter JSON-Load (F5/Codex-Gesamt): nutzt net.get_json statt direktem
