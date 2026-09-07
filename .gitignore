@@ -13,3 +13,7 @@ sucher_cache.db
 health.json
 
 # Golden-Query-Set MUSS versioniert werden (Qualitäts-Messbasis)
+
+# Private Altlasten + Sessions — NICHT öffentlich (persönliche Daten!)
+legacy/
+wissen/
