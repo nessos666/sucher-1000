@@ -11,7 +11,7 @@ Tabellen:
   queries     — ein Suchlauf je Zeile (query, modus, n, ts, treffer)
   provider_health — Health-Status je Quelle (persistente Tabelle statt JSON)
 
-Regeln (Skill: davids-build-methodology):
+Regeln (Build-Methodik: Test-first, ein Block je Commit):
   - SQLite als Source of Truth, YAML/JSON nur Export
   - Atomare Transaktionen (BEGIN IMMEDIATE → COMMIT/ROLLBACK)
   - INSERT OR REPLACE VERBOTEN für versionierte Daten → UNIQUE + Existenzprüfung

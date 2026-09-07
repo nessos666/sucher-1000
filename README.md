@@ -64,7 +64,8 @@ Einfacher: `./launch.sh` (Menü: Web / Studien / Alles).
 ## 🔑 Optionale Keys (nicht nötig zum Loslegen)
 
 Alle Kern-Quellen sind key-frei. Zusätzliche Quellen (Tavily, Exa, SerpApi,
-Reddit, KnowledgeGraph, GoogleBooks, Serper, You.com) aktivierst du mit Keys —
+Reddit, KnowledgeGraph, GoogleBooks, Serper, You.com, ZenRows, SearchAPI,
+Firecrawl) aktivierst du mit Keys —
 **am einfachsten über den Assistenten** (Eingabe verdeckt + Live-Test):
 
 ```bash
@@ -95,6 +96,7 @@ geschrieben, chmod 600). Fehlt ein Key, wird die Quelle übersprungen
 
 - **206 automatisierte Tests** (Netz gemockt — offline reproduzierbar)
 - Profi-Quality-Gate: `./check.sh` → Syntax + mypy + ruff + bandit + pytest
+  (Offline ohne Live-Netz: `./check.sh tests` — für CI/fremde Systeme)
 - Von 2 unabhängigen KI-Reviewern auditiert (Codex + OpenCode), alle Findings behoben
 - Jeder Block einzeln committet — saubere, nachvollziehbare Historie
 - Golden-Query-Check: `python scripts/golden_check.py` → 12 Themen, echte Live-Messung

@@ -3,7 +3,7 @@
 SUCHER — WEB-BÜNDEL (Multi-Engine Web-Suche)
 =============================================
 Mehrere Web-Such-Quellen PARALLEL durchsuchen und aus allen sammeln.
-Eingebaut nach Davids Korrektur (03.09.2026): NICHT eine Web-Suche,
+Eingebaut nach Nutzer-Korrektur (03.09.2026): NICHT eine Web-Suche,
 sondern ein Bündel — ein Befehl durchsucht mehrere Engines.
 
 Quellen (live getestet 03.09.2026):
