@@ -6,15 +6,16 @@
 > sich, welche Quelle krank ist, und überspringt sie 60 Minuten lang
 > (Selbstheilung).
 >
-> Hinweis: Die Zahl `n` ist **pro Quelle** — bei 24 Web-Quellen liefert
-> `sucher.py "…" 3 --modus web` bis zu ~72 Treffer (dedupliziert). Wer
+> Hinweis: Die Zahl `n` ist **pro Quelle** — bei 28 Web-Quellen liefert
+> `sucher.py "…" 3 --modus web` bis zu ~84 Treffer (dedupliziert). Wer
 > wenige Treffer will, nimmt kleinere `n` oder `--quelle <name>`.
 
-Web-Suche (**24 Quellen**: ddgs, Bing, Mojeek, Wikipedia, HackerNews,
+Web-Suche (**28 Quellen**: ddgs, Bing, Mojeek, Wikipedia, HackerNews,
 Google News, Bing News, StackExchange, Wikiquote/Wikinews/Wikisource,
 OpenLibrary, Internet Archive, GitHub, HuggingFace, Google Patents, YouTube,
 Google Scholar, Google Autosuggest — key-frei; + Tavily/Exa/SerpApi/Reddit/
-KnowledgeGraph/GoogleBooks als Key-optional)
+KnowledgeGraph/GoogleBooks/Serper/You.com/ZenRows/SearchAPI/Firecrawl als
+Key-optional)
 **und** wissenschaftliche Suche (OpenAlex, PubMed, arXiv, Crossref, DOAJ,
 EuropePMC, SemanticScholar, Zenodo, DataCite, DBLP, OpenAIRE, ClinicalTrials,
 OpenReview, OSF, CORE, DOAB + Wikipedia/Wikidata) in **einem** Befehl.
@@ -25,7 +26,7 @@ OpenReview, OSF, CORE, DOAB + Wikipedia/Wikidata) in **einem** Befehl.
 
 ```bash
 # 1. Klonen + venv einrichten
-git clone <dein-repo-url> sucher-1000
+git clone https://github.com/nessos666/sucher-1000.git sucher-1000
 cd sucher-1000
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
