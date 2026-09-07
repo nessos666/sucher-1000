@@ -554,14 +554,18 @@ def q_doab(query, n=8):
 
 
 def q_lokal(query, n=10, zeitlimit_s=3):
-    """LOKAL-SUCHE: durchsucht Davids HAUPTLAGER-Wissensbasis (Datei-NAMEN).
-    Findet, was DAVID schon hat — vermeidet Doppelrecherche.
+    """LOKAL-SUCHE: durchsucht die lokale Wissensbasis (Datei-NAMEN).
+    Findet, was der Nutzer schon hat — vermeidet Doppelrecherche.
+    Basis-Pfad: Env SUCHER_LOKAL_BASE (Default: ~/HAUPTLAGER — Davids Ordnung;
+    andere Nutzer setzen die Env auf ihren Wissens-Ordner).
     Hinweis (F8/OpenCode): matcht NUR Dateinamen, nicht Datei-Inhalt
     (Inhalts-Suche wäre zu langsam über 133GB).
     P3: hartes Zeitlimit (default 3s) — os.walk über 133GB darf die Suche nie
     blockieren; wird auch INNERHALB großer Verzeichnisse geprüft (F8)."""
     import time as _time
-    base = "~//HAUPTLAGER"
+    base = os.environ.get("SUCHER_LOKAL_BASE") or os.path.expanduser("~/HAUPTLAGER")
+    if not os.path.isdir(base):
+        return []  # kein Wissens-Ordner konfiguriert → Quelle liefert nichts
     kw = [w.lower() for w in query.split() if len(w)>3]
     hits=[]
     t_start = _time.monotonic()
