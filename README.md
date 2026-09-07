@@ -61,6 +61,21 @@ Einfacher: `./launch.sh` (Menü: Web / Studien / Alles).
 .venv/bin/python sucher.py --sources
 ```
 
+## 🧩 Als Hermes-Skill installieren
+
+Nutzer von [Hermes Agent](https://hermes-agent.nousresearch.com) können SUCHER-1000
+als Skill installieren (Agent führt Suchen selbst aus, mit Archiv-Suche):
+
+```bash
+hermes skills install <owner>/sucher-1000/skills/sucher-1000
+# oder als Tap:
+hermes skills tap add <owner>/sucher-1000
+hermes skills install <owner>/sucher-1000/sucher-1000
+```
+
+Der Skill liegt unter `skills/sucher-1000/SKILL.md` (Bedienung + Installation +
+Archiv-Suche, keine Quellen-Erweiterung).
+
 ## 🔑 Optionale Keys (nicht nötig zum Loslegen)
 
 Alle Kern-Quellen sind key-frei. Zusätzliche Quellen (Tavily, Exa, SerpApi,
