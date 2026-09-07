@@ -38,7 +38,8 @@ Don't use for: Quellen-Erweiterung, Parser-Bau, Härtung (→ research-engine-de
 - `setup.sh` einmalig: prüft python3 → venv → Abhängigkeiten → globalen
   `sucher`-Starter in ~/.local/bin → optionale API-Keys.
 - Kein API-Key nötig zum Loslegen (Kern-Quellen key-frei). Optionale Keys
-  (Tavily/Serper/ZenRows/…) via `scripts/sucher_auth.py --add <quelle>`.
+  (Tavily/Serper/ZenRows/…) via `sucher_auth.py --add <quelle>` im Repo-
+  Wurzelordner (scripts/sucher_auth.py).
 
 ## How to Run
 
