@@ -1,5 +1,7 @@
 # SUCHER-1000 — Universal-Websucher
 
+[![skills.sh](https://skills.sh/b/nessos666/sucher-1000)](https://skills.sh/nessos666/sucher-1000)
+
 > **Eine Suche — viele Quellen parallel.** Web + Wissenschaft in einem
 > Kommandozeilen-Tool. **Funktioniert IMMER**: Fällt eine Quelle aus oder
 > blockt (Captcha/403/429), liefern die anderen weiter — und das Tool merkt
