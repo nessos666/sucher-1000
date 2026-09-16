@@ -176,3 +176,11 @@ auf deinem Rechner.
 
 **Was, wenn eine Quelle blockt?** Andere liefern weiter. Die blockende Quelle
 wird erkannt, gemeldet und für 60 Min übersprungen (Health-Cooldown).
+
+---
+
+## Verwandte Tools
+
+🔬 **Need academic papers?** → [Wissenschaft](https://github.com/nessos666/wissenschaft) · 🧠 **Keep what you learn** → [Extraktor](https://github.com/nessos666/extraktor)
+
+Alle drei sind key-frei und laufen lokal.
