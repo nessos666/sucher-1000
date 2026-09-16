@@ -17,3 +17,6 @@ health.json
 # Private Altlasten + Sessions — NICHT öffentlich (persönliche Daten!)
 legacy/
 wissen/
+
+# Laufzeit-Ergebnisse
+sucher_results/
