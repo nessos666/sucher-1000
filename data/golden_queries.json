@@ -1,0 +1,121 @@
+{
+  "hinweis": "Golden-Query-Set: kalibrierte Suchanfragen mit erwarteten Top-Domains fuer die Qualitaetspruefung (scripts/golden_check.py). Bewusst generisch — keine personenbezogenen Themen.",
+  "queries": [
+    {
+      "query": "posttraumatic growth EMDR systematic review",
+      "modus": "studien",
+      "n": 8,
+      "erwartete_domains": [
+        "springer.com"
+      ],
+      "thema": "Klinische Psychologie: Traumabehandlung"
+    },
+    {
+      "query": "cognitive behavioral therapy trauma meta-analysis",
+      "modus": "studien",
+      "n": 8,
+      "erwartete_domains": [
+        "pubmed.ncbi.nlm.nih.gov",
+        "sciencedirect.com"
+      ],
+      "thema": "Klinische Psychologie: Psychotherapie"
+    },
+    {
+      "query": "childhood adversity mental health outcomes",
+      "modus": "studien",
+      "n": 8,
+      "erwartete_domains": [
+        "pubmed.ncbi.nlm.nih.gov",
+        "apa.org"
+      ],
+      "thema": "Klinische Psychologie: Entwicklungsfolgen"
+    },
+    {
+      "query": "trauma-informed yoga research",
+      "modus": "studien",
+      "n": 8,
+      "erwartete_domains": [
+        "sciencedirect.com"
+      ],
+      "thema": "Klinische Psychologie: Bewegungsintervention"
+    },
+    {
+      "query": "bentonite clay swelling permeability barrier",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": [
+        "sciencedirect.com"
+      ],
+      "thema": "Materialwissenschaft: Tonminerale"
+    },
+    {
+      "query": "bentonite soil water retention agriculture",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": [
+        "sciencedirect.com",
+        "mdpi.com",
+        "springer.com"
+      ],
+      "thema": "Bodenkunde: Wasserretention"
+    },
+    {
+      "query": "clay mineral adsorption heavy metals water treatment",
+      "modus": "studien",
+      "n": 8,
+      "erwartete_domains": [
+        "sciencedirect.com",
+        "mdpi.com"
+      ],
+      "thema": "Umwelttechnik: Wasseraufbereitung"
+    },
+    {
+      "query": "large language model agents tool use survey",
+      "modus": "studien",
+      "n": 5,
+      "erwartete_domains": [
+        "arxiv.org"
+      ],
+      "thema": "Informatik: KI-Agenten"
+    },
+    {
+      "query": "AI coding agent benchmark evaluation",
+      "modus": "alle",
+      "n": 5,
+      "erwartete_domains": [
+        "arxiv.org"
+      ],
+      "thema": "Informatik: Coding-Agenten"
+    },
+    {
+      "query": "machine learning protein structure prediction",
+      "modus": "studien",
+      "n": 8,
+      "erwartete_domains": [
+        "nature.com",
+        "arxiv.org"
+      ],
+      "thema": "Bioinformatik: Proteinstruktur"
+    },
+    {
+      "query": "soil carbon sequestration climate change",
+      "modus": "studien",
+      "n": 8,
+      "erwartete_domains": [
+        "sciencedirect.com",
+        "nature.com"
+      ],
+      "thema": "Umweltwissenschaft: Bodenkohlenstoff"
+    },
+    {
+      "query": "grid scale renewable energy storage",
+      "modus": "studien",
+      "n": 8,
+      "erwartete_domains": [
+        "sciencedirect.com",
+        "mdpi.com"
+      ],
+      "thema": "Energietechnik: Speicherung"
+    }
+  ]
+}
